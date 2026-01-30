@@ -25,6 +25,11 @@ Examples:
  +  where False = choice([True, False])
  +    where choice = random.choice
 
+
+## 📊 Top flakiest tests
+| Test ID | Runs | Passes | Fails |
+|---|---:|---:|---:|
+| `test_sample::test_flaky` | 4 | 6 | 2 |
 ## Runs included
 - `examples\report.xml`
 - `examples\report_run2.xml`

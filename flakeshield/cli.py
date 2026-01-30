@@ -16,6 +16,7 @@ from flakeshield.storage import connect, insert_runs
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.detect_flakes import detect_flaky_tests
 from flakeshield.group_failures import group_failures
+from flakeshield.scoring import top_flakiest
 
 
 def build_reports(
@@ -36,6 +37,8 @@ def build_reports(
 
     conn = connect(db_path)
     inserted = insert_runs(conn, runs)
+    # Compute flake scores
+    top_flakes = top_flakiest(conn, limit=10)
     conn.close()
     print(f"Saved {inserted} test results to {db_path}")
 
@@ -94,7 +97,17 @@ def build_reports(
                     f"- `{ex['run_id']}` — **{ex['test_id']}** — {ex.get('message')}"
                 )
             lines.append("")
-
+    lines.append("")
+    lines.append("## 📊 Top flakiest tests")
+    if not top_flakes:
+        lines.append("✅ No flaky tests with enough history to score.")
+    else:
+        lines.append("| Test ID | Runs | Passes | Fails |")
+        lines.append("|---|---:|---:|---:|")
+        for test_id, runs_seen, pass_count, fail_count in top_flakes:
+            lines.append(
+                f"| `{test_id}` | {runs_seen} | {pass_count} | {fail_count} |"
+            )
     lines.append("## Runs included")
     for p in xml_paths:
         lines.append(f"- `{p}`")
