@@ -3,7 +3,7 @@
 - Runs considered: **4**
 
 ## ⚠️ Flaky tests detected
-- **test_sample::test_flaky** → `failed, passed`
+- **test_sample::test_flaky** → `failed, passed` (runs=4, flake_rate=0.25, confidence=low)
 
 ## 🔥 Failure groups
 ### Group 1 — 4 occurrences
