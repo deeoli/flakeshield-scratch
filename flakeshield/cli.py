@@ -12,18 +12,33 @@ import argparse
 import glob
 import json
 
+from flakeshield.storage import connect, insert_runs
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.detect_flakes import detect_flaky_tests
 from flakeshield.group_failures import group_failures
 
 
-def build_reports(xml_glob: str, out_prefix: str = "flake_report") -> None:
+def build_reports(
+    xml_glob: str,
+    out_prefix: str = "flake_report",
+    db_path: str = "outputs/flakeshield.db",
+) -> None:
     xml_paths = sorted(glob.glob(xml_glob))
 
     if len(xml_paths) < 2:
         raise SystemExit("Need at least 2 XML files to detect flakiness.")
 
     runs = [parse_pytest_junit(p) for p in xml_paths]
+    # Ensure DB directory exists
+    db_dir = os.path.dirname(db_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+    conn = connect(db_path)
+    inserted = insert_runs(conn, runs)
+    conn.close()
+    print(f"Saved {inserted} test results to {db_path}")
+
     flaky = detect_flaky_tests(runs)
     failure_groups = group_failures(runs)
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
@@ -114,9 +129,14 @@ def main() -> None:
         default="flake_report",
         help="Output prefix (writes <out>.json and <out>.md)",
     )
+    p.add_argument(
+        "--db",
+        default="outputs/flakeshield.db",
+        help="SQLite DB path (default: outputs/flakeshield.db)",
+    )
 
     args = p.parse_args()
-    build_reports(args.reports, args.out)
+    build_reports(args.reports, args.out, args.db)
 
 
 if __name__ == "__main__":
