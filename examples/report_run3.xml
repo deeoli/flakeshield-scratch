@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="1" tests="4" time="0.187" timestamp="2026-01-30T10:15:08.474433+00:00" hostname="DESKTOP-H5QG3NC"><testcase classname="test_sample" name="test_always_passes" time="0.001" /><testcase classname="test_sample" name="test_always_fails" time="0.001"><failure message="assert 1 == 2">def test_always_fails():
+&gt;       assert 1 == 2
+E       assert 1 == 2
+
+test_sample.py:8: AssertionError</failure></testcase><testcase classname="test_sample" name="test_flaky" time="0.101" /><testcase classname="test_sample" name="test_skipped" time="0.000"><skipped type="pytest.skip" message="Not implemented yet">C:\Users\HP\Documents\Works\AI-QA\flakeshield-scratch\test_sample.py:16: Not implemented yet</skipped></testcase></testsuite></testsuites>
