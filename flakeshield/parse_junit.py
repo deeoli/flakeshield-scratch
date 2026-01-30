@@ -20,6 +20,7 @@ import sys
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
+from flakeshield.contracts import TestRun
 
 def _text(el: Optional[ET.Element]) -> Optional[str]:
     """
@@ -38,7 +39,7 @@ def _text(el: Optional[ET.Element]) -> Optional[str]:
     return txt or None
 
 
-def parse_pytest_junit(xml_path: str) -> Dict[str, Any]:
+def parse_pytest_junit(xml_path: str) -> TestRun:
     """
     Parse a Pytest-generated JUnit XML file into FlakeShield schema.
 

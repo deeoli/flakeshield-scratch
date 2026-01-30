@@ -26,7 +26,7 @@ Examples:
  +    where choice = random.choice
 
 ## Runs included
-- `report.xml`
-- `report_run2.xml`
-- `report_run3.xml`
-- `report_run4.xml`
+- `examples\report.xml`
+- `examples\report_run2.xml`
+- `examples\report_run3.xml`
+- `examples\report_run4.xml`

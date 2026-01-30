@@ -7,6 +7,7 @@ Goal: product-shaped entrypoint
 - prints summary to console
 """
 
+import os
 import argparse
 import glob
 import json
@@ -25,6 +26,10 @@ def build_reports(xml_glob: str, out_prefix: str = "flake_report") -> None:
     runs = [parse_pytest_junit(p) for p in xml_paths]
     flaky = detect_flaky_tests(runs)
     failure_groups = group_failures(runs)
+    # Ensure output directory exists (if user passed a path like outputs/flake_report)
+    out_dir = os.path.dirname(out_prefix)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
 
     # JSON report
     report = {

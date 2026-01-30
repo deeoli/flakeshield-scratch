@@ -5,10 +5,11 @@ Rule:
 A test is flaky if its status differs across runs.
 """
 
+from flakeshield.contracts import Runs
 from typing import Dict, List, Set
 
 
-def detect_flaky_tests(runs: List[Dict]) -> Dict[str, Set[str]]:
+def detect_flaky_tests(runs: Runs) -> dict[str, set[str]]:
     """
     Input:
       runs = list of parsed run dicts (output of parse_junit)
@@ -30,9 +31,7 @@ def detect_flaky_tests(runs: List[Dict]) -> Dict[str, Set[str]]:
 
     # Keep only tests whose status changes
     flaky = {
-        test_id: statuses
-        for test_id, statuses in history.items()
-        if len(statuses) > 1
+        test_id: statuses for test_id, statuses in history.items() if len(statuses) > 1
     }
 
     return flaky

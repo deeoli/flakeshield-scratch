@@ -5,13 +5,14 @@ Group failing tests by a normalized fingerprint of their error text.
 This reduces CI noise by collapsing repeated failures into root causes.
 """
 
+from flakeshield.contracts import Runs
 from collections import defaultdict
 from typing import Any, Dict, List
 
 from flakeshield.fingerprint import fingerprint_failure
 
 
-def group_failures(runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def group_failures(runs: Runs) -> dict[str, dict]:
     """
     Returns:
       {
