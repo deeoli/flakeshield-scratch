@@ -29,7 +29,7 @@ Examples:
 ## 📊 Top flakiest tests
 | Test ID | Runs | Passes | Fails |
 |---|---:|---:|---:|
-| `test_sample::test_flaky` | 4 | 6 | 2 |
+| `test_sample::test_flaky` | 4 | 3 | 1 |
 ## Runs included
 - `examples\report.xml`
 - `examples\report_run2.xml`

@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS test_results (
   failure_type TEXT,
   message TEXT,
   traceback TEXT,
-  fingerprint TEXT
+  fingerprint TEXT,
+  UNIQUE(run_id, test_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_test_results_run_id ON test_results(run_id);
@@ -59,7 +60,7 @@ def insert_runs(conn: sqlite3.Connection, runs: Runs) -> int:
     rows = list(iter_rows(runs))
     conn.executemany(
         """
-        INSERT INTO test_results (
+    INSERT OR IGNORE INTO test_results (
           run_id, suite, test_id, status, duration_sec,
           failure_type, message, traceback, fingerprint
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

@@ -15,8 +15,9 @@ import json
 from flakeshield.storage import connect, insert_runs
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.detect_flakes import detect_flaky_tests
-from flakeshield.group_failures import group_failures
+from flakeshield.db_queries import get_failure_groups
 from flakeshield.scoring import top_flakiest
+from flakeshield.fingerprint import fingerprint_failure
 
 
 def build_reports(
@@ -30,20 +31,37 @@ def build_reports(
         raise SystemExit("Need at least 2 XML files to detect flakiness.")
 
     runs = [parse_pytest_junit(p) for p in xml_paths]
+
+    # Attach fingerprint to each failing/error case before storing/reporting
+    for run in runs:
+        for case in run["cases"]:
+            if case["status"] in ("failed", "error"):
+                case["fingerprint"] = fingerprint_failure(
+                    case.get("message"), case.get("traceback")
+                )
+
     # Ensure DB directory exists
     db_dir = os.path.dirname(db_path)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
 
     conn = connect(db_path)
-    inserted = insert_runs(conn, runs)
-    # Compute flake scores
-    top_flakes = top_flakiest(conn, limit=10)
-    conn.close()
+    try:
+        inserted = insert_runs(conn, runs)
+
+        # DB-based analytics MUST happen while connection is open
+        failure_groups = get_failure_groups(conn, limit=20)
+
+        # Compute flake scores (DB-backed)
+        top_flakes = top_flakiest(conn, limit=10)
+    finally:
+        conn.close()
+
     print(f"Saved {inserted} test results to {db_path}")
 
+    # In-memory flake detection across the provided runs (kept as-is for now)
     flaky = detect_flaky_tests(runs)
-    failure_groups = group_failures(runs)
+
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)
     if out_dir:
@@ -97,6 +115,7 @@ def build_reports(
                     f"- `{ex['run_id']}` — **{ex['test_id']}** — {ex.get('message')}"
                 )
             lines.append("")
+
     lines.append("")
     lines.append("## 📊 Top flakiest tests")
     if not top_flakes:
@@ -105,9 +124,8 @@ def build_reports(
         lines.append("| Test ID | Runs | Passes | Fails |")
         lines.append("|---|---:|---:|---:|")
         for test_id, runs_seen, pass_count, fail_count in top_flakes:
-            lines.append(
-                f"| `{test_id}` | {runs_seen} | {pass_count} | {fail_count} |"
-            )
+            lines.append(f"| `{test_id}` | {runs_seen} | {pass_count} | {fail_count} |")
+
     lines.append("## Runs included")
     for p in xml_paths:
         lines.append(f"- `{p}`")
@@ -126,6 +144,7 @@ def build_reports(
         print(f"Flaky tests detected (from {len(xml_paths)} runs):")
         for test_id, statuses in flaky.items():
             print(f"- {test_id}: {sorted(statuses)}")
+
 
 
 def main() -> None:
