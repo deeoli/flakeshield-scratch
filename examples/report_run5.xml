@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="1" tests="7" time="0.242" timestamp="2026-01-31T16:35:35.735226+00:00" hostname="DESKTOP-H5QG3NC"><testcase classname="test_sample" name="test_always_passes" time="0.001" /><testcase classname="test_sample" name="test_always_fails" time="0.001"><failure message="assert 1 == 2">def test_always_fails():
+&gt;       assert 1 == 2
+E       assert 1 == 2
+
+test_sample.py:10: AssertionError</failure></testcase><testcase classname="test_sample" name="test_flaky" time="0.101"><failure message="assert False&#10; +  where False = choice([True, False])&#10; +    where choice = random.choice">def test_flaky():
+        time.sleep(0.1)
+&gt;       assert random.choice([True, False])
+E       assert False
+E        +  where False = choice([True, False])
+E        +    where choice = random.choice
+
+test_sample.py:15: AssertionError</failure></testcase><testcase classname="test_sample" name="test_skipped" time="0.001"><skipped type="pytest.skip" message="Not implemented yet">C:\Users\HP\Documents\Works\AI-QA\flakeshield-scratch\test_sample.py:21: Not implemented yet</skipped></testcase><testcase classname="test_sample" name="test_same_bug_variant_1" time="0.001" /><testcase classname="test_sample" name="test_same_bug_variant_2" time="0.000" /><testcase classname="test_sample" name="test_same_bug_variant_3" time="0.000" /></testsuite></testsuites>

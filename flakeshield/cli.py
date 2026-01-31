@@ -7,16 +7,17 @@ Goal: product-shaped entrypoint
 - prints summary to console
 """
 
-import os
 import argparse
 import glob
 import json
+import os
 
-from flakeshield.storage import connect, insert_runs
+from flakeshield.db_queries import get_failure_groups, get_flaky_tests
+from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.scoring import top_flakiest
-from flakeshield.fingerprint import fingerprint_failure
-from flakeshield.db_queries import get_failure_groups, get_flaky_tests
+from flakeshield.semantic_grouping import semantic_groups_from_cases
+from flakeshield.storage import connect, insert_runs
 
 
 def build_reports(
@@ -58,6 +59,17 @@ def build_reports(
 
     print(f"Saved {inserted} test results to {db_path}")
 
+    # ML-assisted semantic failure groups (advisory only) — built from in-memory cases
+    semantic_groups = semantic_groups_from_cases(
+        [c for run in runs for c in run["cases"] if c["status"] in ("failed", "error")],
+        threshold=0.80,
+    )
+
+    # Compare heuristic vs semantic grouping (fragmentation metric)
+    fingerprint_group_count = len(failure_groups)
+    semantic_group_count = len(semantic_groups)
+    fragmentation_delta = fingerprint_group_count - semantic_group_count
+
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)
     if out_dir:
@@ -69,14 +81,21 @@ def build_reports(
         "run_count": len(run_ids),
         "flaky_tests": flaky,
         "failure_groups": failure_groups,
+        "semantic_failure_groups": semantic_groups,
+        "metrics": {
+            "fingerprint_group_count": fingerprint_group_count,
+            "semantic_group_count": semantic_group_count,
+            "fragmentation_delta": fragmentation_delta,
+        },
     }
+
 
     json_path = f"{out_prefix}.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
     # Markdown report
-    lines = []
+    lines: list[str] = []
     lines.append("# FlakeShield Report")
     lines.append("")
     lines.append(f"- Runs considered: **{len(run_ids)}**")
@@ -86,14 +105,14 @@ def build_reports(
         lines.append("✅ No flaky tests detected.")
     else:
         lines.append("## ⚠️ Flaky tests detected")
-    for test_id, data in sorted(flaky.items()):
-        lines.append(
-            f"- **{test_id}** → "
-            f"`{', '.join(data['statuses'])}` "
-            f"(runs={data['runs_seen']}, "
-            f"flake_rate={data['flake_rate']:.2f}, "
-            f"confidence={data['confidence']})"
-        )
+        for test_id, data in sorted(flaky.items()):
+            lines.append(
+                f"- **{test_id}** → "
+                f"`{', '.join(data['statuses'])}` "
+                f"(runs={data['runs_seen']}, "
+                f"flake_rate={data['flake_rate']:.2f}, "
+                f"confidence={data['confidence']})"
+            )
 
     lines.append("")
     lines.append("## 🔥 Failure groups")
@@ -116,6 +135,23 @@ def build_reports(
                 )
             lines.append("")
 
+    lines.append("")
+    lines.append("## 🧠 Semantic failure groups (ML-assisted, experimental)")
+    lines.append(f"- Similarity threshold: **0.80**")
+    lines.append("")
+
+    if not semantic_groups:
+        lines.append("✅ No semantic groups (no failures/errors to cluster).")
+    else:
+        for g in semantic_groups:
+            rep = g["representative"]
+            lines.append(f"### Semantic Group {g['group_id']} — {g['size']} occurrences")
+            lines.append(f"- Representative: `{rep.get('message')}`")
+            lines.append("Members:")
+            for m in g["members"]:
+                lines.append(f"- `{m['run_id']}` — **{m['test_id']}** — {m.get('message')}")
+            lines.append("")
+        
     lines.append("")
     lines.append("## 📊 Top flakiest tests")
     if not top_flakes:
@@ -141,9 +177,14 @@ def build_reports(
     if not flaky:
         print("No flaky tests detected (no status changes across runs).")
     else:
-        print(f"Flaky tests detected (from {len(xml_paths)} runs):")
-        for test_id, statuses in flaky.items():
-            print(f"- {test_id}: {sorted(statuses)}")
+        print(f"Flaky tests detected (from {len(run_ids)} runs):")
+        for test_id, data in sorted(flaky.items()):
+            print(
+                f"- {test_id}: {data['statuses']} "
+                f"(runs={data['runs_seen']}, "
+                f"flake_rate={data['flake_rate']:.2f}, "
+                f"confidence={data['confidence']})"
+            )
 
 
 def main() -> None:
