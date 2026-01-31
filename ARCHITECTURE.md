@@ -14,6 +14,9 @@ Legend:
 NOW (MVP shipped): CLI + SQLite + deterministic core (+ ML assist)
 ------------------------------------------------------------
 
+![FlakeShield Architecture](Architecture.png)
+
+
 (pytest run N) --> (JUnit XML: report_runN.xml)
                      |
                      v
