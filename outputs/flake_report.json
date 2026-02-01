@@ -194,6 +194,7 @@
     }
   ],
   "metrics": {
+    "semantic_enabled": true,
     "fingerprint_group_count": 5,
     "semantic_group_count": 3,
     "fragmentation_delta": 2

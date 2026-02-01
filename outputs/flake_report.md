@@ -103,6 +103,7 @@ assert False
 | `test_sample::test_same_bug_variant_1` | 2 | 1 | 1 |
 | `test_sample::test_same_bug_variant_2` | 2 | 1 | 1 |
 | `test_sample::test_same_bug_variant_3` | 2 | 1 | 1 |
+
 ## Runs included
 - `examples\report.xml`
 - `examples\report_run2.xml`
