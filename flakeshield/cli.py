@@ -16,7 +16,6 @@ from flakeshield.db_queries import get_failure_groups, get_flaky_tests
 from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.scoring import top_flakiest
-from flakeshield.semantic_grouping import semantic_groups_from_cases
 from flakeshield.storage import connect, insert_runs
 
 
@@ -24,6 +23,7 @@ def build_reports(
     xml_glob: str,
     out_prefix: str = "flake_report",
     db_path: str = "outputs/flakeshield.db",
+    enable_semantic: bool = False,
 ) -> None:
     xml_paths = sorted(glob.glob(xml_glob))
 
@@ -59,16 +59,33 @@ def build_reports(
 
     print(f"Saved {inserted} test results to {db_path}")
 
-    # ML-assisted semantic failure groups (advisory only) — built from in-memory cases
-    semantic_groups = semantic_groups_from_cases(
-        [c for run in runs for c in run["cases"] if c["status"] in ("failed", "error")],
-        threshold=0.80,
-    )
+    # --- ML-assisted semantic failure groups (OPT-IN, non-authoritative) ---
+    semantic_groups = []
+    semantic_group_count = None
+    fragmentation_delta = None
 
-    # Compare heuristic vs semantic grouping (fragmentation metric)
-    fingerprint_group_count = len(failure_groups)
-    semantic_group_count = len(semantic_groups)
-    fragmentation_delta = fingerprint_group_count - semantic_group_count
+    # NOTE: get_failure_groups returns dict-like in your implementation
+    # If it returns a dict, len(...) gives number of groups.
+    fingerprint_group_count = len(failure_groups) if failure_groups else 0
+
+    if enable_semantic:
+        # Import only when enabled (avoids loading sentence-transformers unless requested)
+        from flakeshield.semantic_grouping import semantic_groups_from_cases
+
+        failing_cases = [
+            c
+            for run in runs
+            for c in run["cases"]
+            if c["status"] in ("failed", "error")
+        ]
+
+        semantic_groups = semantic_groups_from_cases(
+            failing_cases,
+            threshold=0.80,
+        )
+
+        semantic_group_count = len(semantic_groups)
+        fragmentation_delta = fingerprint_group_count - semantic_group_count
 
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)
@@ -81,14 +98,14 @@ def build_reports(
         "run_count": len(run_ids),
         "flaky_tests": flaky,
         "failure_groups": failure_groups,
-        "semantic_failure_groups": semantic_groups,
+        "semantic_failure_groups": semantic_groups if enable_semantic else [],
         "metrics": {
+            "semantic_enabled": enable_semantic,
             "fingerprint_group_count": fingerprint_group_count,
             "semantic_group_count": semantic_group_count,
             "fragmentation_delta": fragmentation_delta,
         },
     }
-
 
     json_path = f"{out_prefix}.json"
     with open(json_path, "w", encoding="utf-8") as f:
@@ -119,6 +136,7 @@ def build_reports(
     if not failure_groups:
         lines.append("✅ No failures/errors to group.")
     else:
+        # Your failure_groups appears dict-like: {fingerprint: {count, examples}}
         sorted_groups = sorted(
             failure_groups.items(),
             key=lambda kv: kv[1]["count"],
@@ -135,23 +153,29 @@ def build_reports(
                 )
             lines.append("")
 
-    lines.append("")
-    lines.append("## 🧠 Semantic failure groups (ML-assisted, experimental)")
-    lines.append(f"- Similarity threshold: **0.80**")
-    lines.append("")
+    # Semantic section ONLY when enabled
+    if enable_semantic:
+        lines.append("")
+        lines.append("## 🧠 Semantic failure groups (ML-assisted, experimental)")
+        lines.append("- Similarity threshold: **0.80**")
+        lines.append("")
 
-    if not semantic_groups:
-        lines.append("✅ No semantic groups (no failures/errors to cluster).")
-    else:
-        for g in semantic_groups:
-            rep = g["representative"]
-            lines.append(f"### Semantic Group {g['group_id']} — {g['size']} occurrences")
-            lines.append(f"- Representative: `{rep.get('message')}`")
-            lines.append("Members:")
-            for m in g["members"]:
-                lines.append(f"- `{m['run_id']}` — **{m['test_id']}** — {m.get('message')}")
-            lines.append("")
-        
+        if not semantic_groups:
+            lines.append("✅ No semantic groups (no failures/errors to cluster).")
+        else:
+            for g in semantic_groups:
+                rep = g["representative"]
+                lines.append(
+                    f"### Semantic Group {g['group_id']} — {g['size']} occurrences"
+                )
+                lines.append(f"- Representative: `{rep.get('message')}`")
+                lines.append("Members:")
+                for m in g["members"]:
+                    lines.append(
+                        f"- `{m['run_id']}` — **{m['test_id']}** — {m.get('message')}"
+                    )
+                lines.append("")
+
     lines.append("")
     lines.append("## 📊 Top flakiest tests")
     if not top_flakes:
@@ -162,6 +186,7 @@ def build_reports(
         for test_id, runs_seen, pass_count, fail_count in top_flakes:
             lines.append(f"| `{test_id}` | {runs_seen} | {pass_count} | {fail_count} |")
 
+    lines.append("")
     lines.append("## Runs included")
     for p in xml_paths:
         lines.append(f"- `{p}`")
@@ -206,9 +231,14 @@ def main() -> None:
         default="outputs/flakeshield.db",
         help="SQLite DB path (default: outputs/flakeshield.db)",
     )
+    p.add_argument(
+        "--enable-semantic",
+        action="store_true",
+        help="Enable ML-assisted semantic failure grouping (default: off)",
+    )
 
     args = p.parse_args()
-    build_reports(args.reports, args.out, args.db)
+    build_reports(args.reports, args.out, args.db, enable_semantic=args.enable_semantic)
 
 
 if __name__ == "__main__":
