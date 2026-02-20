@@ -70,22 +70,29 @@ def build_reports(
 
     if enable_semantic:
         # Import only when enabled (avoids loading sentence-transformers unless requested)
-        from flakeshield.semantic_grouping import semantic_groups_from_cases
+        try:
+            from flakeshield.semantic_grouping import semantic_groups_from_cases
 
-        failing_cases = [
-            c
-            for run in runs
-            for c in run["cases"]
-            if c["status"] in ("failed", "error")
-        ]
+            failing_cases = [
+                c
+                for run in runs
+                for c in run["cases"]
+                if c["status"] in ("failed", "error")
+            ]
 
-        semantic_groups = semantic_groups_from_cases(
-            failing_cases,
-            threshold=0.80,
-        )
+            semantic_groups = semantic_groups_from_cases(
+                failing_cases,
+                threshold=0.80,
+            )
 
-        semantic_group_count = len(semantic_groups)
-        fragmentation_delta = fingerprint_group_count - semantic_group_count
+            semantic_group_count = len(semantic_groups)
+            fragmentation_delta = fingerprint_group_count - semantic_group_count
+        except Exception as e:
+            print(f"⚠️  Warning: Semantic grouping failed (non-blocking): {e}")
+            print("   Continuing without semantic analysis.")
+            semantic_groups = []
+            semantic_group_count = None
+            fragmentation_delta = None
 
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)

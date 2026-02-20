@@ -24,9 +24,13 @@ jobs:
           pip install -e .
           pip install pytest
 
-      - name: Run tests (JUnit XML)
+      - name: Run unit tests (hardening gate)
         run: |
-          pytest --junitxml=report.xml || true
+          pytest -q
+
+      - name: Run sample run (JUnit XML for FlakeShield demo)
+        run: |
+          pytest examples/test_sample.py --junitxml=report.xml || true
 
       - name: Prepare output directory
         run: |

@@ -103,100 +103,11 @@
       ]
     }
   },
-  "semantic_failure_groups": [
-    {
-      "group_id": 1,
-      "size": 6,
-      "representative": {
-        "test_id": "test_sample::test_always_fails",
-        "run_id": "report.xml",
-        "message": "assert 1 == 2"
-      },
-      "members": [
-        {
-          "test_id": "test_sample::test_always_fails",
-          "run_id": "report.xml",
-          "message": "assert 1 == 2"
-        },
-        {
-          "test_id": "test_sample::test_always_fails",
-          "run_id": "report_run2.xml",
-          "message": "assert 1 == 2"
-        },
-        {
-          "test_id": "test_sample::test_always_fails",
-          "run_id": "report_run3.xml",
-          "message": "assert 1 == 2"
-        },
-        {
-          "test_id": "test_sample::test_always_fails",
-          "run_id": "report_run4.xml",
-          "message": "assert 1 == 2"
-        },
-        {
-          "test_id": "test_sample::test_always_fails",
-          "run_id": "report_run5.xml",
-          "message": "assert 1 == 2"
-        }
-      ]
-    },
-    {
-      "group_id": 2,
-      "size": 3,
-      "representative": {
-        "test_id": "test_sample::test_flaky",
-        "run_id": "report_run4.xml",
-        "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
-      },
-      "members": [
-        {
-          "test_id": "test_sample::test_flaky",
-          "run_id": "report_run4.xml",
-          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
-        },
-        {
-          "test_id": "test_sample::test_flaky",
-          "run_id": "report_run5.xml",
-          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
-        },
-        {
-          "test_id": "test_sample::test_flaky",
-          "run_id": "report_run6.xml",
-          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
-        }
-      ]
-    },
-    {
-      "group_id": 3,
-      "size": 3,
-      "representative": {
-        "test_id": "test_sample::test_same_bug_variant_1",
-        "run_id": "report_run6.xml",
-        "message": "AssertionError: user not found: id=123\nassert False"
-      },
-      "members": [
-        {
-          "test_id": "test_sample::test_same_bug_variant_1",
-          "run_id": "report_run6.xml",
-          "message": "AssertionError: user not found: id=123\nassert False"
-        },
-        {
-          "test_id": "test_sample::test_same_bug_variant_2",
-          "run_id": "report_run6.xml",
-          "message": "AssertionError: ERROR user missing for id=999\nassert False"
-        },
-        {
-          "test_id": "test_sample::test_same_bug_variant_3",
-          "run_id": "report_run6.xml",
-          "message": "AssertionError: lookup failed: user not found (id=555)\nassert False"
-        }
-      ]
-    }
-  ],
+  "semantic_failure_groups": [],
   "metrics": {
-    "semantic_enabled": true,
+    "semantic_enabled": false,
     "fingerprint_group_count": 5,
-    "semantic_group_count": 3,
-    "fragmentation_delta": 2
+    "semantic_group_count": null,
+    "fragmentation_delta": null
   }
 }
