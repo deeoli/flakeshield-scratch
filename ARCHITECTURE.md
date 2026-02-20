@@ -45,6 +45,7 @@ NOW (MVP shipped): CLI + SQLite + deterministic core (+ ML assist)
            [SQLite Persistence: flakeshield.db] *
            - idempotent inserts (UNIQUE(run_id, test_id))
            - stored rows are the source of truth
+           - tables: test_results (primary), failure_embeddings (Week 4, reserved)
 
                      |
                      v
@@ -58,11 +59,12 @@ NOW (MVP shipped): CLI + SQLite + deterministic core (+ ML assist)
 
                      |
                      v
-        [Semantic Failure Grouping] ~ (assistive, reversible)
+        [Semantic Failure Grouping] ~ (assistive, reversible, gated)
         - embed failure text (message/traceback)
-        - group by cosine similarity threshold
+        - group by cosine similarity threshold (default 0.80)
         - never replaces fingerprint groups; adds an extra view
         - evaluated via fragmentation metrics
+        - enabled via --enable-semantic flag (non-blocking on failure)
 
                      |
                      v
@@ -74,10 +76,22 @@ NOW (MVP shipped): CLI + SQLite + deterministic core (+ ML assist)
                 - ML-assisted semantic groups (clearly labeled)
                 - metrics: fingerprint_group_count, semantic_group_count, fragmentation_delta
 
+**Database Schema (Week 4):**
+
+- `test_results` (authoritative)
+  - run_id, test_id, status, message, traceback, fingerprint, ...
+  - UNIQUE(run_id, test_id) for idempotent inserts
+  - Indexes: run_id, test_id, status, fingerprint
+
+- `failure_embeddings` (reserved for future use)
+  - fingerprint, model_name, dim, vector, created_at
+  - UNIQUE(fingerprint, model_name)
+  - *Currently not written to by semantic grouping (no persistence yet)*
+
 Artifacts:
-- outputs/flake_report.json
-- outputs/flake_report.md
-- outputs/flakeshield.db
+- outputs/flake_report.json (JSON report: deterministic + semantic)
+- outputs/flake_report.md (Markdown report: human-readable)
+- outputs/flakeshield.db (SQLite: source of truth)
 
 Operating guarantees:
 - Deterministic core always runs
