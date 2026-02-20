@@ -69,7 +69,8 @@ def build_reports(
     fingerprint_group_count = len(failure_groups) if failure_groups else 0
 
     if enable_semantic:
-        # Import only when enabled (avoids loading sentence-transformers unless requested)
+        # Import and run semantic-only logic when explicitly requested.
+        # Wrap entire block so failures are non-blocking.
         try:
             from flakeshield.semantic_grouping import semantic_groups_from_cases
 
@@ -80,6 +81,73 @@ def build_reports(
                 if c["status"] in ("failed", "error")
             ]
 
+            # Known vs novel classification using persisted embeddings (Week 4)
+            known_failures = []
+            novel_failures = []
+
+            try:
+                # local import to avoid loading model unless needed
+                from flakeshield.embeddings import embed_texts, MODEL_NAME
+                from flakeshield.embeddings_store import get_embedding, upsert_embedding
+            except Exception:
+                # If embedding infra isn't available, skip known/novel classification
+                embed_texts = None
+                MODEL_NAME = None
+                get_embedding = None
+                upsert_embedding = None
+
+            # Classify by fingerprint using DB persistence
+            if (
+                failure_groups
+                and MODEL_NAME
+                and get_embedding
+                and upsert_embedding
+                and embed_texts
+            ):
+                conn2 = connect(db_path)
+                try:
+                    fingerprints = list(failure_groups.keys())
+
+                    # Prepare texts for any fingerprints that are not yet persisted
+                    fps_to_embed = []
+                    texts_to_embed = []
+
+                    for fp in fingerprints:
+                        try:
+                            existing = get_embedding(conn2, fp, MODEL_NAME)
+                        except Exception:
+                            existing = None
+
+                        if existing is not None:
+                            known_failures.append(fp)
+                        else:
+                            # Choose a representative text (first example message) or fallback to fingerprint
+                            exs = failure_groups.get(fp, {}).get("examples", [])
+                            text = None
+                            if exs:
+                                text = exs[0].get("message")
+                            if not text:
+                                text = fp
+
+                            fps_to_embed.append(fp)
+                            texts_to_embed.append(text)
+
+                    if texts_to_embed:
+                        vecs = embed_texts(texts_to_embed)
+                        for fp, vec in zip(fps_to_embed, vecs):
+                            try:
+                                upsert_embedding(conn2, fp, MODEL_NAME, vec)
+                                novel_failures.append(fp)
+                            except Exception:
+                                # Non-blocking per-fingerprint failure
+                                continue
+                finally:
+                    conn2.close()
+            else:
+                known_failures = []
+                novel_failures = []
+
+            # Compute semantic groups (assistive view)
             semantic_groups = semantic_groups_from_cases(
                 failing_cases,
                 threshold=0.80,
@@ -93,6 +161,8 @@ def build_reports(
             semantic_groups = []
             semantic_group_count = None
             fragmentation_delta = None
+            known_failures = []
+            novel_failures = []
 
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)
@@ -106,6 +176,8 @@ def build_reports(
         "flaky_tests": flaky,
         "failure_groups": failure_groups,
         "semantic_failure_groups": semantic_groups if enable_semantic else [],
+        "novel_failures": novel_failures if enable_semantic else [],
+        "known_failures": known_failures if enable_semantic else [],
         "metrics": {
             "semantic_enabled": enable_semantic,
             "fingerprint_group_count": fingerprint_group_count,
