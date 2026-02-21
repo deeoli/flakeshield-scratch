@@ -55,10 +55,13 @@ def _normalize_report_for_comparison(report: dict) -> dict:
         else:
             normalized["failure_groups"][fp] = group
 
-    # semantic_failure_groups: list of lists; sort by first case test_id
+    # semantic_failure_groups: list of dicts; sort by group_id for consistency
     semantic_groups = report.get("semantic_failure_groups", [])
     normalized["semantic_failure_groups"] = sorted(
-        semantic_groups, key=lambda g: g[0].get("test_id", "") if g else ""
+        semantic_groups,
+        key=lambda g: (
+            g.get("group_id", float("inf")) if isinstance(g, dict) else float("inf")
+        ),
     )
 
     # novel_failures: list of strings (sort)
@@ -83,7 +86,26 @@ def _normalize_report_for_comparison(report: dict) -> dict:
         normalized_matches.sort(key=lambda m: m["fingerprint"])
         normalized["novel_failure_matches"][fp] = normalized_matches
 
-    # metrics: dict with stable keys
+    # risk_analysis: dict of dicts; sort keys and round scores
+    risk = report.get("risk_analysis", {})
+    normalized["risk_analysis"] = {}
+    for fp in sorted(risk.keys()):
+        analysis = risk[fp]
+        # Round scores to 4 decimals
+        normalized["risk_analysis"][fp] = {
+            "risk_score": round(float(analysis.get("risk_score", 0.0)), 4),
+            "components": {
+                "flake_rate": round(
+                    float(analysis.get("components", {}).get("flake_rate", 0.0)), 4
+                ),
+                "novelty": round(
+                    float(analysis.get("components", {}).get("novelty", 0.0)), 4
+                ),
+                "similarity": round(
+                    float(analysis.get("components", {}).get("similarity", 0.0)), 4
+                ),
+            },
+        }  # metrics: dict with stable keys
     metrics = report.get("metrics", {})
     normalized["metrics"] = {
         "semantic_enabled": metrics.get("semantic_enabled", False),
@@ -93,6 +115,36 @@ def _normalize_report_for_comparison(report: dict) -> dict:
     }
 
     return normalized
+
+
+import pytest
+
+
+def fake_embed(texts):
+    import numpy as np
+
+    return [np.zeros(384, dtype=np.float32) for _ in texts]
+
+
+@pytest.fixture(autouse=True)
+def patch_embed_texts(monkeypatch):
+    import sys
+    import types
+    import numpy as np
+
+    class DummyModel:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def encode(self, texts, normalize_embeddings=True, convert_to_numpy=False):
+            return [np.zeros(384, dtype=np.float32) for _ in texts]
+
+    dummy_mod = types.ModuleType("sentence_transformers")
+    dummy_mod.SentenceTransformer = DummyModel
+    monkeypatch.setitem(sys.modules, "sentence_transformers", dummy_mod)
+
+    # Patch the embedding function on the embeddings module (import will use dummy model)
+    monkeypatch.setattr("flakeshield.embeddings.embed_texts", fake_embed, raising=False)
 
 
 def test_semantic_json_contract_enabled():
@@ -165,6 +217,7 @@ def test_semantic_json_contract_enabled():
             "novel_failures",
             "known_failures",
             "novel_failure_matches",
+            "risk_analysis",
             "metrics",
         ]
         for key in required_keys:
@@ -207,9 +260,17 @@ def test_semantic_json_contract_enabled():
             normalized["semantic_failure_groups"], list
         ), "semantic_failure_groups must be list"
         for group in normalized["semantic_failure_groups"]:
-            assert isinstance(group, list), "Each group must be list"
-            for case in group:
-                assert isinstance(case, dict), "Each case must be dict"
+            assert isinstance(group, dict), "Each group must be dict"
+            assert "group_id" in group, "Each group must have group_id"
+            assert "members" in group, "Each group must have members"
+            members = group["members"]
+            assert isinstance(members, list), "members must be list"
+            if members:
+                first = members[0]
+                assert isinstance(first, dict), "Each member must be dict"
+                assert "run_id" in first, "Member must have run_id"
+                assert "test_id" in first, "Member must have test_id"
+                assert "message" in first, "Member must have message"
 
         # novel_failures
         assert isinstance(
@@ -243,6 +304,33 @@ def test_semantic_json_contract_enabled():
                 assert (
                     -1 <= match["score"] <= 1
                 ), f"Score out of [-1, 1]: {match['score']}"
+
+        # risk_analysis
+        assert isinstance(
+            normalized["risk_analysis"], dict
+        ), "risk_analysis must be dict"
+        for fp, analysis in normalized["risk_analysis"].items():
+            assert isinstance(fp, str), "Risk analysis FP must be string"
+            assert isinstance(analysis, dict), "Each risk analysis must be dict"
+            assert "risk_score" in analysis, "Risk analysis must have risk_score"
+            assert "components" in analysis, "Risk analysis must have components"
+
+            risk_score = analysis["risk_score"]
+            assert isinstance(risk_score, (int, float)), "risk_score must be numeric"
+            assert (
+                0.0 <= risk_score <= 1.0
+            ), f"risk_score out of [0.0, 1.0]: {risk_score}"
+
+            components = analysis["components"]
+            assert isinstance(components, dict), "components must be dict"
+            assert "flake_rate" in components, "components must have flake_rate"
+            assert "novelty" in components, "components must have novelty"
+            assert "similarity" in components, "components must have similarity"
+
+            for key in ["flake_rate", "novelty", "similarity"]:
+                val = components[key]
+                assert isinstance(val, (int, float)), f"component {key} must be numeric"
+                assert 0.0 <= val <= 1.0, f"component {key} out of [0.0, 1.0]: {val}"
 
         # metrics
         assert isinstance(normalized["metrics"], dict), "metrics must be dict"
@@ -320,6 +408,7 @@ def test_semantic_json_contract_disabled():
         assert (
             report["novel_failure_matches"] == {}
         ), "novel_failure_matches must be empty dict"
+        assert report["risk_analysis"] == {}, "risk_analysis must be empty dict"
 
         # === Assert deterministic fields still present ===
         assert "failure_groups" in report, "failure_groups must be present"

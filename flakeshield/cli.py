@@ -16,6 +16,7 @@ from flakeshield.db_queries import get_failure_groups, get_flaky_tests
 from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.known_novel import classify_known_novel
 from flakeshield.parse_junit import parse_pytest_junit
+from flakeshield.risk_scoring import compute_risk_analysis
 from flakeshield.scoring import top_flakiest
 from flakeshield.similarity import get_top_k_similar
 from flakeshield.storage import connect, insert_runs
@@ -66,6 +67,7 @@ def build_reports(
     semantic_group_count = None
     fragmentation_delta = None
     novel_failure_matches = {}
+    risk_analysis = {}
 
     # NOTE: get_failure_groups returns dict-like in your implementation
     # If it returns a dict, len(...) gives number of groups.
@@ -159,6 +161,33 @@ def build_reports(
 
             semantic_group_count = len(semantic_groups)
             fragmentation_delta = fingerprint_group_count - semantic_group_count
+
+            # Compute risk analysis for each fingerprint (Phase C)
+            # Advisory layer: combines deterministic flake_rate with semantic novelty/similarity
+            for fp, group in failure_groups.items():
+                # Deterministic: flake_rate based on frequency
+                # (count / total_runs gives us how often this fingerprint occurs)
+                failure_count = group.get("count", 0)
+                total_runs = len(run_ids) if run_ids else 1
+                flake_rate = min(1.0, failure_count / max(1, total_runs))
+
+                # Semantic: is_novel
+                is_novel = fp in novel_failures
+
+                # Semantic: max_similarity_score
+                max_similarity_score = None
+                if fp in novel_failure_matches and novel_failure_matches[fp]:
+                    # Get highest similarity score for this fingerprint
+                    max_similarity_score = max(
+                        m.get("score", 0.0) for m in novel_failure_matches[fp]
+                    )
+
+                # Compute risk
+                risk_analysis[fp] = compute_risk_analysis(
+                    flake_rate=flake_rate,
+                    is_novel=is_novel,
+                    max_similarity_score=max_similarity_score,
+                )
         except Exception as e:
             print(f"⚠️  Warning: Semantic grouping failed (non-blocking): {e}")
             print("   Continuing without semantic analysis.")
@@ -168,6 +197,7 @@ def build_reports(
             known_failures = []
             novel_failures = []
             novel_failure_matches = {}
+            risk_analysis = {}
 
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)
@@ -184,6 +214,7 @@ def build_reports(
         "novel_failures": novel_failures if enable_semantic else [],
         "known_failures": known_failures if enable_semantic else [],
         "novel_failure_matches": novel_failure_matches if enable_semantic else {},
+        "risk_analysis": risk_analysis if enable_semantic else {},
         "metrics": {
             "semantic_enabled": enable_semantic,
             "fingerprint_group_count": fingerprint_group_count,

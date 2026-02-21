@@ -123,7 +123,71 @@ If semantic enabled, expect:
 }
 ```
 
-## CLI Reference
+## Common Commands
+
+### Testing
+
+```bash
+# Run all tests (41 passing)
+python -m pytest tests/ -q
+
+# Run all tests with verbose output
+python -m pytest tests/ -v
+
+# Run specific test file
+python -m pytest tests/test_risk_scoring.py -v
+python -m pytest tests/test_semantic_json_contract.py -v
+
+# Run tests with coverage report
+python -m pytest tests/ --cov=flakeshield --cov-report=term-missing
+
+# Run single test
+python -m pytest tests/test_risk_scoring.py::test_high_risk_novel_flaky_similar -v
+
+# Run tests matching pattern
+python -m pytest tests/ -k "risk_scoring" -v
+
+# Golden contract tests only (JSON structure validation)
+python -m pytest tests/test_semantic_json_contract.py -v
+```
+
+### CLI Usage
+
+```bash
+# Deterministic mode (default, no semantic)
+python -m flakeshield.cli --reports "examples/report*.xml" --out outputs/flake_report
+
+# With semantic analysis enabled (advisory layer)
+python -m flakeshield.cli --reports "examples/report*.xml" --out outputs/flake_report --enable-semantic
+
+# Custom database path
+python -m flakeshield.cli --reports "examples/report*.xml" --out outputs/flake_report --db /tmp/custom.db --enable-semantic
+
+# View generated report
+cat outputs/flake_report.json | python -m json.tool
+
+# Check report metrics (bash)
+cat outputs/flake_report.json | jq '.metrics'
+
+# Check report metrics (PowerShell)
+Get-Content outputs/flake_report.json | ConvertFrom-Json | Select-Object metrics
+```
+
+### Development Workflow
+
+```bash
+# 1. Run all tests
+python -m pytest tests/ -q
+
+# 2. Run CLI on example reports
+python -m flakeshield.cli --reports "examples/report*.xml" --out outputs/flake_report --enable-semantic
+
+# 3. Inspect generated JSON report
+cat outputs/flake_report.json | python -m json.tool
+
+# 4. View markdown report
+cat outputs/flake_report.md
+```
 
 ```
 usage: flakeshield [-h] [--reports REPORTS] [--out OUT] [--db DB] [--enable-semantic]
