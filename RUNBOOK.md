@@ -43,6 +43,40 @@ When `--enable-semantic` is enabled:
 - `metrics.fragmentation_delta` shows semantic improvement (if any)
 - If embedding model download fails: CLI continues with deterministic results only (non-blocking)
 
+### ⚠️ Semantic Mode Notes (Model Download & CI)
+
+Semantic mode uses a local embedding model (via sentence-transformers).
+
+First Run Behavior
+
+On the first run with --enable-semantic, the embedding model may download from HuggingFace Hub:
+
+- This can take a few seconds.
+- A warning about unauthenticated requests may appear.
+- This does not affect deterministic results.
+
+Subsequent runs will use the cached model and be fast.
+
+CI Recommendation
+
+In CI environments:
+
+- Deterministic mode is the authoritative signal.
+- Semantic mode is advisory only.
+- CI should not require network access.
+
+It is recommended to:
+
+- Either disable `--enable-semantic` in CI
+- Or preload the embedding model in the build environment
+
+Semantic failures (model load errors, network issues, etc.) are:
+
+- Non-blocking
+- Automatically downgraded to deterministic-only mode
+- Reported with `metrics.semantic_enabled = false`
+
+
 ## Verification (Week 4 Schema)
 
 ### Step 1: Run Deterministic Command
@@ -122,6 +156,34 @@ If semantic enabled, expect:
   "fragmentation_delta": N - M
 }
 ```
+
+Extended semantic-enabled JSON (includes similarity + risk metadata):
+```json
+{
+  "semantic_enabled": true,
+  "fingerprint_group_count": N,
+  "semantic_group_count": M,
+  "fragmentation_delta": N - M,
+  "risk_analysis": { "<fingerprint>": { "risk_score": 0.12, "components": { "flake_rate": 0.5, "novelty": 0.0, "similarity": 0.1 } } },
+  "novel_failure_matches": { "<novel_fp>": [ { "fingerprint": "<hist_fp>", "score": 0.82 }, ... ] }
+}
+```
+
+Short descriptions:
+- `novel_failure_matches`: Top-k historical similar fingerprints (advisory)
+- `risk_analysis`: Derived risk score per fingerprint (advisory, non-authoritative)
+
+Why This Matters
+
+Your system is now:
+
+- Deterministic-first
+- ML-assisted
+- Non-blocking
+- JSON-contract frozen
+- CI-safe
+
+The RUNBOOK reflects that maturity: semantic outputs are advisory and CI-friendly.
 
 ## Common Commands
 
