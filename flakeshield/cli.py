@@ -14,6 +14,7 @@ import os
 
 from flakeshield.db_queries import get_failure_groups, get_flaky_tests
 from flakeshield.fingerprint import fingerprint_failure
+from flakeshield.known_novel import classify_known_novel
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.scoring import top_flakiest
 from flakeshield.storage import connect, insert_runs
@@ -106,41 +107,18 @@ def build_reports(
             ):
                 conn2 = connect(db_path)
                 try:
-                    fingerprints = list(failure_groups.keys())
-
-                    # Prepare texts for any fingerprints that are not yet persisted
-                    fps_to_embed = []
-                    texts_to_embed = []
-
-                    for fp in fingerprints:
-                        try:
-                            existing = get_embedding(conn2, fp, MODEL_NAME)
-                        except Exception:
-                            existing = None
-
-                        if existing is not None:
-                            known_failures.append(fp)
-                        else:
-                            # Choose a representative text (first example message) or fallback to fingerprint
-                            exs = failure_groups.get(fp, {}).get("examples", [])
-                            text = None
-                            if exs:
-                                text = exs[0].get("message")
-                            if not text:
-                                text = fp
-
-                            fps_to_embed.append(fp)
-                            texts_to_embed.append(text)
-
-                    if texts_to_embed:
-                        vecs = embed_texts(texts_to_embed)
-                        for fp, vec in zip(fps_to_embed, vecs):
-                            try:
-                                upsert_embedding(conn2, fp, MODEL_NAME, vec)
-                                novel_failures.append(fp)
-                            except Exception:
-                                # Non-blocking per-fingerprint failure
-                                continue
+                    known_failures, novel_failures = classify_known_novel(
+                        conn2,
+                        failure_groups,
+                        MODEL_NAME,
+                        embed_texts,
+                        get_embedding,
+                        upsert_embedding,
+                    )
+                except Exception:
+                    # Non-blocking: any error in classification reverts to empty lists
+                    known_failures = []
+                    novel_failures = []
                 finally:
                     conn2.close()
             else:
