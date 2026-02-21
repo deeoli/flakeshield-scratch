@@ -17,6 +17,7 @@ from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.known_novel import classify_known_novel
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.scoring import top_flakiest
+from flakeshield.similarity import get_top_k_similar
 from flakeshield.storage import connect, insert_runs
 
 
@@ -64,6 +65,7 @@ def build_reports(
     semantic_groups = []
     semantic_group_count = None
     fragmentation_delta = None
+    novel_failure_matches = {}
 
     # NOTE: get_failure_groups returns dict-like in your implementation
     # If it returns a dict, len(...) gives number of groups.
@@ -115,15 +117,39 @@ def build_reports(
                         get_embedding,
                         upsert_embedding,
                     )
+
+                    # Similarity lookup for novel failures (Phase B Step 2)
+                    # For each novel fingerprint, find top-k similar historical embeddings
+                    if novel_failures and MODEL_NAME and get_embedding:
+                        try:
+                            for fp_novel in novel_failures:
+                                vec_novel = get_embedding(conn2, fp_novel, MODEL_NAME)
+                                if vec_novel is not None:
+                                    matches = get_top_k_similar(
+                                        conn2,
+                                        vec_novel,
+                                        MODEL_NAME,
+                                        k=3,
+                                        exclude_fingerprint=fp_novel,
+                                    )
+                                    novel_failure_matches[fp_novel] = [
+                                        {"fingerprint": fp, "score": float(score)}
+                                        for fp, score in matches
+                                    ]
+                        except Exception:
+                            # Non-blocking: similarity lookup failure doesn't affect primary results
+                            pass
                 except Exception:
                     # Non-blocking: any error in classification reverts to empty lists
                     known_failures = []
                     novel_failures = []
+                    novel_failure_matches = {}
                 finally:
                     conn2.close()
             else:
                 known_failures = []
                 novel_failures = []
+                novel_failure_matches = {}
 
             # Compute semantic groups (assistive view)
             semantic_groups = semantic_groups_from_cases(
@@ -141,6 +167,7 @@ def build_reports(
             fragmentation_delta = None
             known_failures = []
             novel_failures = []
+            novel_failure_matches = {}
 
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)
@@ -156,6 +183,7 @@ def build_reports(
         "semantic_failure_groups": semantic_groups if enable_semantic else [],
         "novel_failures": novel_failures if enable_semantic else [],
         "known_failures": known_failures if enable_semantic else [],
+        "novel_failure_matches": novel_failure_matches if enable_semantic else {},
         "metrics": {
             "semantic_enabled": enable_semantic,
             "fingerprint_group_count": fingerprint_group_count,
