@@ -164,6 +164,11 @@ def build_reports(
 
             # Compute risk analysis for each fingerprint (Phase C)
             # Advisory layer: combines deterministic flake_rate with semantic novelty/similarity
+            # Prepare risk assessment (advisory, semantic-only)
+            from flakeshield.risk import compute_risk_score
+
+            risk_assessment = {}
+
             for fp, group in failure_groups.items():
                 # Deterministic: flake_rate based on frequency
                 # (count / total_runs gives us how often this fingerprint occurs)
@@ -188,6 +193,28 @@ def build_reports(
                     is_novel=is_novel,
                     max_similarity_score=max_similarity_score,
                 )
+
+                # Build risk_assessment entry (advisory)
+                score = compute_risk_score(
+                    flake_rate=flake_rate,
+                    is_novel=is_novel,
+                    max_similarity=max_similarity_score,
+                    runs_seen=total_runs,
+                )
+
+                risk_assessment[fp] = {
+                    "risk_score": float(score),
+                    "reasons": {
+                        "flake_rate": float(flake_rate),
+                        "novel": bool(is_novel),
+                        "max_similarity": (
+                            float(max_similarity_score)
+                            if max_similarity_score is not None
+                            else None
+                        ),
+                        "runs_seen": int(total_runs),
+                    },
+                }
         except Exception as e:
             print(f"⚠️  Warning: Semantic grouping failed (non-blocking): {e}")
             print("   Continuing without semantic analysis.")
@@ -198,6 +225,7 @@ def build_reports(
             novel_failures = []
             novel_failure_matches = {}
             risk_analysis = {}
+            risk_assessment = {}
 
     # Ensure output directory exists (if user passed a path like outputs/flake_report)
     out_dir = os.path.dirname(out_prefix)
@@ -215,6 +243,7 @@ def build_reports(
         "known_failures": known_failures if enable_semantic else [],
         "novel_failure_matches": novel_failure_matches if enable_semantic else {},
         "risk_analysis": risk_analysis if enable_semantic else {},
+        "risk_assessment": risk_assessment if enable_semantic else {},
         "metrics": {
             "semantic_enabled": enable_semantic,
             "fingerprint_group_count": fingerprint_group_count,

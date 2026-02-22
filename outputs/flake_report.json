@@ -103,11 +103,222 @@
       ]
     }
   },
-  "semantic_failure_groups": [],
+  "semantic_failure_groups": [
+    {
+      "group_id": 1,
+      "size": 6,
+      "representative": {
+        "test_id": "test_sample::test_always_fails",
+        "run_id": "report.xml",
+        "message": "assert 1 == 2"
+      },
+      "members": [
+        {
+          "test_id": "test_sample::test_always_fails",
+          "run_id": "report.xml",
+          "message": "assert 1 == 2"
+        },
+        {
+          "test_id": "test_sample::test_always_fails",
+          "run_id": "report_run2.xml",
+          "message": "assert 1 == 2"
+        },
+        {
+          "test_id": "test_sample::test_always_fails",
+          "run_id": "report_run3.xml",
+          "message": "assert 1 == 2"
+        },
+        {
+          "test_id": "test_sample::test_always_fails",
+          "run_id": "report_run4.xml",
+          "message": "assert 1 == 2"
+        },
+        {
+          "test_id": "test_sample::test_always_fails",
+          "run_id": "report_run5.xml",
+          "message": "assert 1 == 2"
+        }
+      ]
+    },
+    {
+      "group_id": 2,
+      "size": 3,
+      "representative": {
+        "test_id": "test_sample::test_flaky",
+        "run_id": "report_run4.xml",
+        "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
+      },
+      "members": [
+        {
+          "test_id": "test_sample::test_flaky",
+          "run_id": "report_run4.xml",
+          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
+        },
+        {
+          "test_id": "test_sample::test_flaky",
+          "run_id": "report_run5.xml",
+          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
+        },
+        {
+          "test_id": "test_sample::test_flaky",
+          "run_id": "report_run6.xml",
+          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
+        }
+      ]
+    },
+    {
+      "group_id": 3,
+      "size": 3,
+      "representative": {
+        "test_id": "test_sample::test_same_bug_variant_1",
+        "run_id": "report_run6.xml",
+        "message": "AssertionError: user not found: id=123\nassert False"
+      },
+      "members": [
+        {
+          "test_id": "test_sample::test_same_bug_variant_1",
+          "run_id": "report_run6.xml",
+          "message": "AssertionError: user not found: id=123\nassert False"
+        },
+        {
+          "test_id": "test_sample::test_same_bug_variant_2",
+          "run_id": "report_run6.xml",
+          "message": "AssertionError: ERROR user missing for id=999\nassert False"
+        },
+        {
+          "test_id": "test_sample::test_same_bug_variant_3",
+          "run_id": "report_run6.xml",
+          "message": "AssertionError: lookup failed: user not found (id=555)\nassert False"
+        }
+      ]
+    }
+  ],
+  "novel_failures": [
+    "assert 1 == 2",
+    "assert false\n +  where false = choice([true, false])\n +    where choice = random.choice",
+    "assertionerror: user not found: id=123\nassert false",
+    "assertionerror: lookup failed: user not found (id=555)\nassert false",
+    "assertionerror: error user missing for id=999\nassert false"
+  ],
+  "known_failures": [],
+  "novel_failure_matches": {
+    "assert 1 == 2": [
+      {
+        "fingerprint": "assert false\n +  where false = choice([true, false])\n +    where choice = random.choice",
+        "score": 0.5227019786834717
+      },
+      {
+        "fingerprint": "assertionerror: user not found: id=123\nassert false",
+        "score": 0.41792577505111694
+      },
+      {
+        "fingerprint": "assertionerror: error user missing for id=999\nassert false",
+        "score": 0.3890708088874817
+      }
+    ],
+    "assert false\n +  where false = choice([true, false])\n +    where choice = random.choice": [
+      {
+        "fingerprint": "assert 1 == 2",
+        "score": 0.5227019786834717
+      },
+      {
+        "fingerprint": "assertionerror: user not found: id=123\nassert false",
+        "score": 0.35427743196487427
+      },
+      {
+        "fingerprint": "assertionerror: lookup failed: user not found (id=555)\nassert false",
+        "score": 0.3517163097858429
+      }
+    ],
+    "assertionerror: user not found: id=123\nassert false": [
+      {
+        "fingerprint": "assertionerror: error user missing for id=999\nassert false",
+        "score": 0.9049962759017944
+      },
+      {
+        "fingerprint": "assertionerror: lookup failed: user not found (id=555)\nassert false",
+        "score": 0.8606847524642944
+      },
+      {
+        "fingerprint": "assert 1 == 2",
+        "score": 0.41792577505111694
+      }
+    ],
+    "assertionerror: lookup failed: user not found (id=555)\nassert false": [
+      {
+        "fingerprint": "assertionerror: user not found: id=123\nassert false",
+        "score": 0.8606847524642944
+      },
+      {
+        "fingerprint": "assertionerror: error user missing for id=999\nassert false",
+        "score": 0.8359584808349609
+      },
+      {
+        "fingerprint": "assert false\n +  where false = choice([true, false])\n +    where choice = random.choice",
+        "score": 0.3517163097858429
+      }
+    ],
+    "assertionerror: error user missing for id=999\nassert false": [
+      {
+        "fingerprint": "assertionerror: user not found: id=123\nassert false",
+        "score": 0.9049962759017944
+      },
+      {
+        "fingerprint": "assertionerror: lookup failed: user not found (id=555)\nassert false",
+        "score": 0.8359584808349609
+      },
+      {
+        "fingerprint": "assert 1 == 2",
+        "score": 0.3890708088874817
+      }
+    ]
+  },
+  "risk_analysis": {
+    "assert 1 == 2": {
+      "risk_score": 0.9045403957366944,
+      "components": {
+        "flake_rate": 1.0,
+        "novelty": 1.0,
+        "similarity": 0.5227019786834717
+      }
+    },
+    "assert false\n +  where false = choice([true, false])\n +    where choice = random.choice": {
+      "risk_score": 0.6545403957366944,
+      "components": {
+        "flake_rate": 0.5,
+        "novelty": 1.0,
+        "similarity": 0.5227019786834717
+      }
+    },
+    "assertionerror: user not found: id=123\nassert false": {
+      "risk_score": 0.5643325885136922,
+      "components": {
+        "flake_rate": 0.16666666666666666,
+        "novelty": 1.0,
+        "similarity": 0.9049962759017944
+      }
+    },
+    "assertionerror: lookup failed: user not found (id=555)\nassert false": {
+      "risk_score": 0.5554702838261922,
+      "components": {
+        "flake_rate": 0.16666666666666666,
+        "novelty": 1.0,
+        "similarity": 0.8606847524642944
+      }
+    },
+    "assertionerror: error user missing for id=999\nassert false": {
+      "risk_score": 0.5643325885136922,
+      "components": {
+        "flake_rate": 0.16666666666666666,
+        "novelty": 1.0,
+        "similarity": 0.9049962759017944
+      }
+    }
+  },
   "metrics": {
-    "semantic_enabled": false,
+    "semantic_enabled": true,
     "fingerprint_group_count": 5,
-    "semantic_group_count": null,
-    "fragmentation_delta": null
+    "semantic_group_count": 3,
+    "fragmentation_delta": 2
   }
 }

@@ -57,6 +57,45 @@ Examples:
 assert False
 
 
+## 🧠 Semantic failure groups (ML-assisted, experimental)
+- Similarity threshold: **0.80**
+
+### Semantic Group 1 — 6 occurrences
+- Representative: `assert 1 == 2`
+Members:
+- `report.xml` — **test_sample::test_always_fails** — assert 1 == 2
+- `report_run2.xml` — **test_sample::test_always_fails** — assert 1 == 2
+- `report_run3.xml` — **test_sample::test_always_fails** — assert 1 == 2
+- `report_run4.xml` — **test_sample::test_always_fails** — assert 1 == 2
+- `report_run5.xml` — **test_sample::test_always_fails** — assert 1 == 2
+
+### Semantic Group 2 — 3 occurrences
+- Representative: `assert False
+ +  where False = choice([True, False])
+ +    where choice = random.choice`
+Members:
+- `report_run4.xml` — **test_sample::test_flaky** — assert False
+ +  where False = choice([True, False])
+ +    where choice = random.choice
+- `report_run5.xml` — **test_sample::test_flaky** — assert False
+ +  where False = choice([True, False])
+ +    where choice = random.choice
+- `report_run6.xml` — **test_sample::test_flaky** — assert False
+ +  where False = choice([True, False])
+ +    where choice = random.choice
+
+### Semantic Group 3 — 3 occurrences
+- Representative: `AssertionError: user not found: id=123
+assert False`
+Members:
+- `report_run6.xml` — **test_sample::test_same_bug_variant_1** — AssertionError: user not found: id=123
+assert False
+- `report_run6.xml` — **test_sample::test_same_bug_variant_2** — AssertionError: ERROR user missing for id=999
+assert False
+- `report_run6.xml` — **test_sample::test_same_bug_variant_3** — AssertionError: lookup failed: user not found (id=555)
+assert False
+
+
 ## 📊 Top flakiest tests
 | Test ID | Runs | Passes | Fails |
 |---|---:|---:|---:|
