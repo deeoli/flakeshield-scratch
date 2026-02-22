@@ -1,6 +1,32 @@
+---
+
 # FlakeShield
 
-**CI signal reduction tool**: Detect, group, and prioritize flaky test failures using fingerprinting and semantic analysis.
+**Deterministic CI signal reduction with optional semantic intelligence.**
+
+FlakeShield analyzes JUnit test results and turns CI failure noise into prioritized, actionable insight — without blocking your pipeline.
+
+---
+
+## What It Solves
+
+Modern CI pipelines suffer from:
+
+* Flaky tests masking real regressions
+* Repeated “known” failures wasting triage time
+* Poor prioritization of failures
+* Fragmented error grouping
+
+FlakeShield reduces noise and surfaces:
+
+* Flaky tests (with confidence levels)
+* Deterministic failure groups
+* Known vs novel failures
+* Top-k similar historical failures (semantic mode)
+* Advisory risk scoring
+* CLI high-risk summary
+
+---
 
 ## Quick Start
 
@@ -10,33 +36,56 @@
 pip install -e .
 ```
 
-### Deterministic Mode (Default)
+---
 
-Analyze test failures using fingerprinting (no ML required):
+## Deterministic Mode (Default)
+
+Analyze test failures using fingerprinting only (no ML, no network):
 
 ```bash
 flakeshield --reports "examples/report*.xml" --out outputs/flake_report --db outputs/flakeshield.db
 ```
 
 This will:
+
 1. Parse JUnit XML files
-2. Persist results to SQLite DB
+2. Persist results to SQLite
 3. Generate:
-   - `outputs/flake_report.json` (machine-readable)
-   - `outputs/flake_report.md` (human-readable)
 
-### Optional: Semantic Mode (ML-Assisted)
+   * `outputs/flake_report.json` (machine-readable)
+   * `outputs/flake_report.md` (human-readable)
 
-Enable semantic failure grouping, similarity matching, and risk prioritization:
+Deterministic mode is always authoritative.
+
+---
+
+## Optional: Semantic Mode (ML-Assisted, Non-Blocking)
+
+Enable semantic grouping, similarity lookup, and advisory risk scoring:
 
 ```bash
 flakeshield --reports "examples/report*.xml" --out outputs/flake_report --db outputs/flakeshield.db --enable-semantic
 ```
 
-**Note**: On first run with `--enable-semantic`, the embedding model may download from HuggingFace Hub (a few seconds). Subsequent runs use cached model. The semantic layer is:
-- **Optional**: deterministic mode works without it
-- **Advisory-only**: not authoritative
-- **Non-blocking**: failures degrade gracefully to deterministic-only
+First run may download an embedding model (a few seconds).
+Subsequent runs use cached model.
+
+The semantic layer is:
+
+* **Optional** — deterministic mode works without it
+* **Advisory-only** — never authoritative
+* **Non-blocking** — failures degrade gracefully
+* **CI-safe** — semantic errors do not fail builds
+
+When enabled, CLI also prints:
+
+```
+High Risk Failures:
+1. <fingerprint> — 0.83
+2. <fingerprint> — 0.71
+```
+
+---
 
 ## Commands
 
@@ -47,15 +96,41 @@ flakeshield --help
 # Deterministic run (no network/model required)
 flakeshield --reports "examples/report*.xml" --out outputs/flake_report
 
-# Semantic-enabled run (downloads model on first run)
+# Semantic-enabled run
 flakeshield --reports "examples/report*.xml" --out outputs/flake_report --enable-semantic
 
 # Custom database path
 flakeshield --reports "examples/report*.xml" --out outputs/flake_report --db /tmp/custom.db --enable-semantic
 
-# View generated report
+# Pretty-print JSON report
 cat outputs/flake_report.json | python -m json.tool
 ```
+
+---
+
+## Architecture
+
+FlakeShield follows a strict layered design:
+
+### Deterministic Core (Authoritative)
+
+* Fingerprint normalization
+* Failure grouping
+* Flakiness detection
+* Confidence scoring
+* DB-backed analytics
+
+### Semantic Layer (Advisory)
+
+* Embedding persistence
+* Known vs novel detection
+* Top-k similarity matching
+* Risk scoring
+* CLI high-risk summary
+
+The deterministic layer is always the source of truth.
+
+---
 
 ## Development
 
@@ -71,12 +146,19 @@ Run with coverage:
 pytest tests/ --cov=flakeshield --cov-report=term-missing
 ```
 
-## Architecture
+All semantic features are fully test-covered and CI-safe.
 
-- **Deterministic core**: Fingerprinting, flakiness detection, scoring (always authoritative)
-- **Semantic layer**: Embeddings, similarity, risk assessment (advisory, optional, non-blocking)
-- **Output**: JSON + Markdown reports with structured failure grouping
+---
+
+## Version
+
+Current version: **0.2.0**
+
+---
 
 ## License
 
 MIT
+
+---
+
