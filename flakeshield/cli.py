@@ -356,6 +356,26 @@ def build_reports(
                 f"confidence={data['confidence']})"
             )
 
+    # CLI summary: print top high-risk failures when semantic mode is enabled
+    if enable_semantic:
+        try:
+            if risk_assessment:
+                # Extract and sort top entries by risk_score desc
+                items = sorted(
+                    risk_assessment.items(),
+                    key=lambda kv: float(kv[1].get("risk_score", 0.0)),
+                    reverse=True,
+                )[:5]
+
+                if items:
+                    print("\nHigh Risk Failures:")
+                    for i, (fp, info) in enumerate(items, start=1):
+                        score = float(info.get("risk_score", 0.0))
+                        print(f"{i}. {fp} — {score:.2f}")
+        except Exception:
+            # Non-blocking: don't let summary printing affect exit code
+            pass
+
 
 def main() -> None:
     p = argparse.ArgumentParser(
