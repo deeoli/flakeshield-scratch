@@ -1,0 +1,2 @@
+[console_scripts]
+flakeshield = flakeshield.cli:main
