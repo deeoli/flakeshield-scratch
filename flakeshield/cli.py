@@ -202,6 +202,31 @@ def build_reports(
                     runs_seen=total_runs,
                 )
 
+                # Apply small penalty if this fingerprint is related to flaky tests
+                # Definition: is_flaky_related = any example's test_id appears in `flaky` mapping
+                is_flaky_related = False
+                try:
+                    examples = (
+                        group.get("examples", []) if isinstance(group, dict) else []
+                    )
+                    for ex in examples:
+                        test_id = ex.get("test_id")
+                        if test_id and test_id in flaky:
+                            is_flaky_related = True
+                            break
+                except Exception:
+                    # Be conservative: if we can't determine, assume not flaky-related
+                    is_flaky_related = False
+
+                if is_flaky_related:
+                    score = float(score) * 0.85
+
+                # Clamp just in case
+                if score < 0.0:
+                    score = 0.0
+                if score > 1.0:
+                    score = 1.0
+
                 risk_assessment[fp] = {
                     "risk_score": float(score),
                     "reasons": {

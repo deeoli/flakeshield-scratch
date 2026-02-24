@@ -1,4 +1,0 @@
-sentence-transformers
-
-[dev]
-pytest>=8.0
