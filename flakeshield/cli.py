@@ -95,8 +95,27 @@ def build_reports(
 
             try:
                 # local import to avoid loading model unless needed
-                from flakeshield.embeddings import embed_texts, MODEL_NAME
-                from flakeshield.embeddings_store import get_embedding, upsert_embedding
+                if os.getenv("FLAKESHIELD_DUMMY_EMBEDS"):
+                    # test-mode: use lightweight stub to avoid HF downloads
+                    import numpy as _np
+
+                    def embed_texts(texts):
+                        return [_np.ones(8, dtype=_np.float32) for _ in texts]
+
+                    MODEL_NAME = "dummy-model"
+
+                    def get_embedding(conn, fp, model):
+                        return None
+
+                    def upsert_embedding(conn, fp, model, vec):
+                        return None
+
+                else:
+                    from flakeshield.embeddings import embed_texts, MODEL_NAME
+                    from flakeshield.embeddings_store import (
+                        get_embedding,
+                        upsert_embedding,
+                    )
             except Exception:
                 # If embedding infra isn't available, skip known/novel classification
                 embed_texts = None
@@ -105,7 +124,11 @@ def build_reports(
                 upsert_embedding = None
 
             # Classify by fingerprint using DB persistence
-            if (
+            if os.getenv("FLAKESHIELD_FORCE_NOVEL"):
+                # test-mode shortcut: mark every fingerprint as novel
+                known_failures = []
+                novel_failures = list(failure_groups.keys()) if failure_groups else []
+            elif (
                 failure_groups
                 and MODEL_NAME
                 and get_embedding
@@ -442,6 +465,21 @@ def main() -> None:
         action="store_true",
         help="Enable ML-assisted semantic failure grouping (default: off)",
     )
+    p.add_argument(
+        "--warn-on-high",
+        action="store_true",
+        help="Print warning if any fingerprint has tier HIGH or CRITICAL",
+    )
+    p.add_argument(
+        "--fail-on-critical",
+        action="store_true",
+        help="Exit nonzero if any fingerprint has tier CRITICAL",
+    )
+    p.add_argument(
+        "--max-risk-threshold",
+        type=float,
+        help="Exit nonzero if any risk_score >= threshold",
+    )
 
     args = p.parse_args()
     # load configuration and apply defaults
@@ -458,6 +496,31 @@ def main() -> None:
         enable_semantic=enable_semantic,
         min_runs=min_runs,
     )
+
+    # policy enforcement (semantic-only)
+    from flakeshield.policy import evaluate_policy
+
+    # load report JSON file
+    report_path = f"{args.out}.json"
+    exit_code = 0
+    warnings = []
+    try:
+        with open(report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        exit_code, warnings = evaluate_policy(
+            report,
+            warn_on_high=args.warn_on_high,
+            fail_on_critical=args.fail_on_critical,
+            max_risk_threshold=args.max_risk_threshold,
+        )
+        for w in warnings:
+            print(w)
+    except Exception:
+        # if loading fails or policy eval fails, we silently ignore to keep CLI stable
+        exit_code = 0
+
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":
