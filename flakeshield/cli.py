@@ -305,6 +305,18 @@ def build_reports(
         },
     }
 
+    # deterministic regression detection; works even if semantic disabled
+    try:
+        from flakeshield.regressions import detect_regressions
+
+        conn3 = connect(db_path)
+        try:
+            report["regressions"] = detect_regressions(conn3, run_ids)
+        finally:
+            conn3.close()
+    except Exception:
+        report["regressions"] = []
+
     json_path = f"{out_prefix}.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
