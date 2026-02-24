@@ -12,11 +12,13 @@ import glob
 import json
 import os
 
+from flakeshield.config import load_config
 from flakeshield.db_queries import get_failure_groups, get_flaky_tests
 from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.known_novel import classify_known_novel
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.risk_scoring import compute_risk_analysis
+from flakeshield.policy import classify_risk_tier
 from flakeshield.scoring import top_flakiest
 from flakeshield.similarity import get_top_k_similar
 from flakeshield.storage import connect, insert_runs
@@ -27,6 +29,7 @@ def build_reports(
     out_prefix: str = "flake_report",
     db_path: str = "outputs/flakeshield.db",
     enable_semantic: bool = False,
+    min_runs: int = 4,
 ) -> None:
     xml_paths = sorted(glob.glob(xml_glob))
 
@@ -56,7 +59,7 @@ def build_reports(
         # DB-only analytics MUST happen while connection is open
         failure_groups = get_failure_groups(conn, limit=20)
         top_flakes = top_flakiest(conn, limit=10)
-        flaky = get_flaky_tests(conn, min_runs=4)
+        flaky = get_flaky_tests(conn, min_runs=min_runs)
     finally:
         conn.close()
 
@@ -227,8 +230,10 @@ def build_reports(
                 if score > 1.0:
                     score = 1.0
 
+                tier = classify_risk_tier(score)
                 risk_assessment[fp] = {
                     "risk_score": float(score),
+                    "risk_tier": tier,
                     "reasons": {
                         "flake_rate": float(flake_rate),
                         "novel": bool(is_novel),
@@ -422,13 +427,37 @@ def main() -> None:
         help="SQLite DB path (default: outputs/flakeshield.db)",
     )
     p.add_argument(
+        "--config",
+        default=None,
+        help="Path to JSON config file (default: ./.flakeshield.json)",
+    )
+    p.add_argument(
+        "--min-runs",
+        type=int,
+        dest="min_runs",
+        help="Minimum runs for flakiness detection (default: 4)",
+    )
+    p.add_argument(
         "--enable-semantic",
         action="store_true",
         help="Enable ML-assisted semantic failure grouping (default: off)",
     )
 
     args = p.parse_args()
-    build_reports(args.reports, args.out, args.db, enable_semantic=args.enable_semantic)
+    # load configuration and apply defaults
+    cfg = load_config(args.config)
+
+    # determine effective options
+    min_runs = args.min_runs if args.min_runs is not None else cfg.get("min_runs", 4)
+    enable_semantic = args.enable_semantic or cfg.get("enable_semantic", False)
+
+    build_reports(
+        args.reports,
+        args.out,
+        args.db,
+        enable_semantic=enable_semantic,
+        min_runs=min_runs,
+    )
 
 
 if __name__ == "__main__":
