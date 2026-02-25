@@ -2,8 +2,7 @@ name: FlakeShield CI Signal Reduction
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   flakeshield:
@@ -21,30 +20,37 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install -e .
-          pip install pytest
 
-      - name: Run unit tests (hardening gate)
+      - name: Run tests (produce JUnit XML)
         run: |
-          pytest -q
-
-      - name: Run sample run (JUnit XML for FlakeShield demo)
-        run: |
-          pytest examples/test_sample.py --junitxml=report.xml || true
+          mkdir -p outputs
+          pytest --junitxml=outputs/junit.xml
 
       - name: Prepare output directory
         run: |
           mkdir -p outputs
 
-      - name: Run FlakeShield
+      - name: Run FlakeShield (deterministic)
         run: |
-          python -m flakeshield.cli \
-            --reports report.xml \
-            --out outputs/flake_report \
-            --db outputs/flakeshield.db
+          flakeshield --reports "outputs/junit.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db
 
-      - name: Upload FlakeShield reports
-        uses: actions/upload-artifact@v4
+      - name: Run FlakeShield (semantic, non-blocking)
+        run: |
+          flakeshield --reports "outputs/junit.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db \
+                     --enable-semantic
+        continue-on-error: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
         with:
-          name: flakeshield-report
-          path: outputs/
+          name: flakeshield-reports
+          path: |
+            outputs/flake_report.json
+            outputs/flake_report.md
+            outputs/flakeshield.db

@@ -108,6 +108,67 @@ cat outputs/flake_report.json | python -m json.tool
 
 ---
 
+## GitHub Actions
+
+Drop the following file in your repository at
+`.github/workflows/flakeshield.yml` to get an automatic triage run on
+every pull request.  It installs the package, runs your tests with
+JUnit output, executes FlakeShield deterministically (and semantically
+as an optional, non‑blocking step) and uploads the generated report
+artifacts.
+
+```yaml
+name: FlakeShield
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  flakeshield:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+      - name: Run tests
+        run: |
+          mkdir -p outputs
+          pytest --junitxml=outputs/junit.xml
+      - name: Run FlakeShield (deterministic)
+        run: |
+          flakeshield --reports "outputs/junit.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db
+      - name: Run FlakeShield (semantic, non-blocking)
+        run: |
+          flakeshield --reports "outputs/junit.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db \
+                     --enable-semantic
+        continue-on-error: true
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: flakeshield-reports
+          path: |
+            outputs/flake_report.json
+            outputs/flake_report.md
+            outputs/flakeshield.db
+```
+
+---
+
+
+---
+
 ## Architecture
 
 FlakeShield follows a strict layered design:
