@@ -211,6 +211,28 @@ All semantic features are fully test-covered and CI-safe.
 
 ---
 
+## GitHub Action Usage
+
+You can use FlakeShield as a reusable action instead of copying YAML verbatim:
+
+```yaml
+- uses: flakeshield/action@v0.3.0
+  with:
+    reports: "outputs/*.xml"          # required
+    enable-semantic: true              # optional
+    fail-on-critical: true             # optional
+    warn-on-high: true                 # optional
+    max-risk-threshold: 0.75           # optional
+    post-comment: true                 # optional, needs GITHUB_TOKEN
+```
+
+This composite action checks out your code, installs the package, runs the
+CLI with the provided inputs, and uploads the JSON/Markdown reports as
+artifacts.  It mirrors the behaviour of the example workflow but is
+significantly easier to maintain across repositories.
+
+---
+
 ## Version
 
 Current version: **0.2.0**
