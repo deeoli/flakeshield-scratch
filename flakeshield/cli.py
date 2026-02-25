@@ -11,6 +11,7 @@ import argparse
 import glob
 import json
 import os
+import sys
 
 from flakeshield.config import load_config
 from flakeshield.db_queries import get_failure_groups, get_flaky_tests
@@ -443,6 +444,26 @@ def build_reports(
 
 
 def main() -> None:
+    # support a lightweight "pr-summary" subcommand before the main
+    # argument parser.  We check manually rather than using subparsers so we
+    # keep the earlier interface 100% backwards-compatible.
+    if len(sys.argv) >= 2 and sys.argv[1] == "pr-summary":
+        ps = argparse.ArgumentParser(
+            prog="flakeshield pr-summary",
+            description="Create markdown suitable for a PR comment from a JSON report",
+        )
+        ps.add_argument("--json", required=True, help="Path to FlakeShield JSON report")
+        ps.add_argument("--out", required=True, help="Output markdown path")
+        args = ps.parse_args(sys.argv[2:])
+        from flakeshield.pr_summary import render_pr_summary
+
+        with open(args.json, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        md = render_pr_summary(report)
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(md)
+        return
+
     p = argparse.ArgumentParser(
         prog="flakeshield", description="CI signal reduction tool"
     )
