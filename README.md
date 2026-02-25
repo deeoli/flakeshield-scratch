@@ -213,23 +213,44 @@ All semantic features are fully test-covered and CI-safe.
 
 ## GitHub Action Usage
 
-You can use FlakeShield as a reusable action instead of copying YAML verbatim:
+You can use FlakeShield as a reusable action instead of copying YAML verbatim.
+The repository includes a Docker-based action at the root (`action.yml`) which
+wraps the CLI in a self-contained container.  When you publish a release the
+action can be referenced via a tag (e.g. `flakeshield/action@v0.4.0`).  A
+sample workflow looks like:
 
 ```yaml
-- uses: flakeshield/action@v0.3.0
-  with:
-    reports: "outputs/*.xml"          # required
-    enable-semantic: true              # optional
-    fail-on-critical: true             # optional
-    warn-on-high: true                 # optional
-    max-risk-threshold: 0.75           # optional
-    post-comment: true                 # optional, needs GITHUB_TOKEN
+jobs:
+  flakecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: pytest --junitxml=outputs/junit.xml
+      - uses: ./            # local action (or flakeshield/action@v0.4.0)
+        with:
+          reports: "outputs/junit.xml"
+          enable_semantic: "true"        # optional
+          fail_on_critical: "true"       # optional
 ```
 
-This composite action checks out your code, installs the package, runs the
-CLI with the provided inputs, and uploads the JSON/Markdown reports as
-artifacts.  It mirrors the behaviour of the example workflow but is
-significantly easier to maintain across repositories.
+The Docker action brings these benefits:
+
+* no Python setup/installation step on the runner
+* deterministic environment (built once in container)
+* faster startup and caching when pulled from registry
+
+Inputs mirror the CLI flags and default sensibly:
+* `reports` – glob for XMLs (required)
+* `enable_semantic`, `warn_on_high`, `fail_on_critical` – booleans
+* `max_risk_threshold` – float
+* `out_prefix` (default `outputs/flake_report`)
+* `db_path` (default `outputs/flakeshield.db`)
+
+The action installs your code, runs `flakeshield`, and uploads the resulting
+JSON/MD/DB artifacts.  When executed on a pull request the action will
+also generate a PR summary and automatically post or update a comment
+containing the report (no extra configuration needed).
 
 ---
 

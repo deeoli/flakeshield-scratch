@@ -3,90 +3,41 @@ description: "Runs the FlakeShield CLI to triage JUnit reports inside a workflow
 
 inputs:
   reports:
-    description: "Glob pattern for JUnit XML reports (passed to --reports)."
+    description: "Glob pattern for JUnit XML reports."
     required: true
-  enable-semantic:
-    description: "Enable semantic mode (adds --enable-semantic to the CLI)."
+  enable_semantic:
+    description: "Enable semantic mode."
     required: false
     default: "false"
-  fail-on-critical:
-    description: "Add --fail-on-critical flag to the CLI."
+  warn_on_high:
+    description: "Add --warn-on-high flag."
     required: false
     default: "false"
-  warn-on-high:
-    description: "Add --warn-on-high flag to the CLI."
+  fail_on_critical:
+    description: "Add --fail-on-critical flag."
     required: false
     default: "false"
-  max-risk-threshold:
-    description: "Numeric threshold for --max-risk-threshold flag."
+  max_risk_threshold:
+    description: "Threshold for --max-risk-threshold."
     required: false
     default: ""
-  post-comment:
-    description: "If true, generate and post a PR comment (requires GITHUB_TOKEN)."
+  out_prefix:
+    description: "Base path for output files."
     required: false
-    default: "false"
+    default: "outputs/flake_report"
+  db_path:
+    description: "SQLite DB path."
+    required: false
+    default: "outputs/flakeshield.db"
 
 runs:
-  using: "composite"
-  steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install .
-
-    - name: Prepare output directory
-      run: mkdir -p outputs
-
-    - name: Run FlakeShield
-      shell: bash
-      run: |
-        cmd=("flakeshield" "--reports" "${{ inputs.reports }}" \
-              "--out" "outputs/flake_report" \
-              "--db" "outputs/flakeshield.db")
-        if [ "${{ inputs.enable-semantic }}" = "true" ]; then
-          cmd+=("--enable-semantic")
-        fi
-        if [ "${{ inputs.fail-on-critical }}" = "true" ]; then
-          cmd+=("--fail-on-critical")
-        fi
-        if [ "${{ inputs.warn-on-high }}" = "true" ]; then
-          cmd+=("--warn-on-high")
-        fi
-        if [ -n "${{ inputs.max-risk-threshold }}" ]; then
-          cmd+=("--max-risk-threshold" "${{ inputs.max-risk-threshold }}")
-        fi
-        "${cmd[@]}"
-
-    - name: Upload JSON report
-      uses: actions/upload-artifact@v3
-      with:
-        name: flakeshield-report-json
-        path: outputs/flake_report.json
-
-    - name: Upload Markdown report
-      uses: actions/upload-artifact@v3
-      with:
-        name: flakeshield-report-md
-        path: outputs/flake_report.md
-
-    - name: Create PR comment
-      if: ${{ inputs.post-comment == 'true' && github.event_name == 'pull_request' }}
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const fs = require('fs');
-          const body = fs.readFileSync('outputs/pr_comment.md', 'utf8');
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body,
-          }).catch(e => console.log('comment failed', e));
+  using: docker
+  image: Dockerfile
+  args:
+    - "${{ inputs.reports }}"
+    - "${{ inputs.out_prefix }}"
+    - "${{ inputs.db_path }}"
+    - "${{ inputs.enable_semantic }}"
+    - "${{ inputs.warn_on_high }}"
+    - "${{ inputs.fail_on_critical }}"
+    - "${{ inputs.max_risk_threshold }}"
