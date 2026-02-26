@@ -12,5 +12,5 @@ RUN chmod +x entrypoint.sh
 # Install the package and dependencies
 RUN pip install --no-cache-dir .
 
-# Default entrypoint forwards to the flakeshield CLI
-ENTRYPOINT ["flakeshield"]
+# Default entrypoint uses our helper script that maps inputs to flags
+ENTRYPOINT ["/app/entrypoint.sh"]

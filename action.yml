@@ -34,10 +34,18 @@ runs:
   using: docker
   image: Dockerfile
   args:
+    - --reports
     - "${{ inputs.reports }}"
+    - --out
     - "${{ inputs.out_prefix }}"
+    - --db
     - "${{ inputs.db_path }}"
+    # Boolean logic: The script receives these as the string "true" or "false"
+    - --enable-semantic
     - "${{ inputs.enable_semantic }}"
+    - --warn-on-high
     - "${{ inputs.warn_on_high }}"
+    - --fail-on-critical
     - "${{ inputs.fail_on_critical }}"
+    - --max-risk-threshold
     - "${{ inputs.max_risk_threshold }}"

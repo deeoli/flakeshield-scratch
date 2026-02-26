@@ -51,10 +51,19 @@ def test_cli_pr_summary(tmp_path):
     sample = {"flaky_tests": {"t": {"flake_rate": 0.1, "runs_seen": 1}}}
     json_path.write_text(json.dumps(sample))
     from flakeshield.cli import main
+
     # simulate command line invocation
     import sys
+
     old_argv = sys.argv
-    sys.argv = ["flakeshield", "pr-summary", "--json", str(json_path), "--out", str(out_path)]
+    sys.argv = [
+        "flakeshield",
+        "pr-summary",
+        "--json",
+        str(json_path),
+        "--out",
+        str(out_path),
+    ]
     try:
         main()
     finally:
