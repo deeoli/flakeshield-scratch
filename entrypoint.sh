@@ -1,14 +1,8 @@
-﻿#!/bin/bash
+﻿#!/bin/sh
 set -e
 
-# positional args: reports out db enable_semantic warn_on_high fail_on_critical max_risk_threshold
-reports="$1"
-out="$2"
-db="$3"
-enable_semantic="$4"
-warn_on_high="$5"
-fail_on_critical="$6"
-max_risk_threshold="$7"
+# Pass all arguments directly to flakeshield CLI
+exec flakeshield "$@"
 
 # build command
 cmd=("flakeshield" "--reports" "$reports" "--out" "$out" "--db" "$db")
