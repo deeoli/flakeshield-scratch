@@ -13,4 +13,4 @@ RUN chmod +x entrypoint.sh
 RUN pip install --no-cache-dir .
 
 # Default entrypoint uses our helper script that maps inputs to flags
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["sh", "/app/entrypoint.sh"]
