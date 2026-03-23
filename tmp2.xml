@@ -1,5 +1,0 @@
-﻿<testsuite name="suite">
-  <testcase name="t1">
-    <failure>oops</failure>
-  </testcase>
-</testsuite>
