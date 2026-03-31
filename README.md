@@ -243,7 +243,7 @@ The Docker action brings these benefits:
 Inputs mirror the CLI flags and default sensibly:
 * `reports` – glob for XMLs (required)
 * `enable_semantic`, `warn_on_high`, `fail_on_critical` – booleans
-* `max_risk_threshold` – float
+* `max-risk-threshold` – float
 * `out_prefix` (default `outputs/flake_report`)
 * `db_path` (default `outputs/flakeshield.db`)
 

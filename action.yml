@@ -17,7 +17,7 @@ inputs:
     description: "Add --fail-on-critical flag."
     required: false
     default: "false"
-  max_risk_threshold:
+  max-risk-threshold:
     description: "Threshold for --max-risk-threshold."
     required: false
     default: ""
@@ -40,4 +40,4 @@ runs:
     - "${{ inputs.enable_semantic }}"
     - "${{ inputs.warn_on_high }}"
     - "${{ inputs.fail_on_critical }}"
-    - "${{ inputs.max_risk_threshold }}"
+    - "${{ inputs.max-risk-threshold }}"
