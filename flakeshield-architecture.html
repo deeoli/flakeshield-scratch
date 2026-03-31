@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlakeShield — High-Level Architecture</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 40px 20px;
+      line-height: 1.7;
+    }
+    .container { max-width: 1080px; margin: 0 auto; }
+    h1 { font-size: 30px; color: #f8fafc; margin-bottom: 4px; }
+    .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 44px; }
+    h2 {
+      font-size: 18px;
+      color: #38bdf8;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2 .num {
+      background: #1e3a5f;
+      color: #38bdf8;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .section { margin-bottom: 56px; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .card p { color: #cbd5e1; font-size: 14px; margin-bottom: 10px; }
+    .card p:last-child { margin-bottom: 0; }
+    pre {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 20px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #e2e8f0;
+      margin: 16px 0;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      white-space: pre-wrap;
+    }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: 6px;
+    }
+    .tag.det { background: #082f49; color: #38bdf8; border: 1px solid #0ea5e9; }
+    .tag.sem { background: #3b0764; color: #c084fc; border: 1px solid #a855f7; }
+    .tag.policy { background: #422006; color: #fde047; border: 1px solid #eab308; }
+    .tag.state { background: #064e3b; color: #34d399; border: 1px solid #10b981; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+    .grid-card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .grid-card h4 { color: #f1f5f9; font-size: 14px; margin-bottom: 8px; }
+    .grid-card p, .grid-card ul { color: #94a3b8; font-size: 13px; }
+    .grid-card ul { padding-left: 16px; }
+    .grid-card ul li { margin-bottom: 4px; }
+    .highlight {
+      background: #1e3a5f;
+      border-left: 3px solid #38bdf8;
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+    .highlight p { color: #93c5fd; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      background: #0f172a;
+      color: #94a3b8;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #334155;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1e293b;
+      color: #cbd5e1;
+      vertical-align: top;
+    }
+    td code {
+      background: #0f172a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #38bdf8;
+    }
+    .arch-diagram {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 32px;
+      margin: 16px 0;
+    }
+    .arch-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .arch-box {
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      min-width: 170px;
+    }
+    .arch-box.input { background: #1e293b; border: 2px solid #64748b; color: #f1f5f9; }
+    .arch-box.det { background: #082f49; border: 2px solid #38bdf8; color: #7dd3fc; }
+    .arch-box.sem { background: #3b0764; border: 2px solid #a855f7; color: #d8b4fe; }
+    .arch-box.policy { background: #422006; border: 2px solid #eab308; color: #fde047; }
+    .arch-box.state { background: #064e3b; border: 2px solid #34d399; color: #6ee7b7; }
+    .arch-box.output { background: #1e3a5f; border: 2px solid #60a5fa; color: #dbeafe; }
+    .arch-box.future { background: #3f0b0b; border: 2px solid #fb7185; color: #fecdd3; }
+    .arch-arrow { color: #475569; font-size: 20px; }
+    .arch-arrow-down { color: #475569; font-size: 20px; text-align: center; margin: 4px 0; }
+    .arch-label { color: #64748b; font-size: 11px; text-align: center; margin-top: -8px; margin-bottom: 8px; }
+    .module-flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 8px 0;
+    }
+    .module-chip {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+    }
+    .module-chip.active { background: #172554; border-color: #3b82f6; color: #93c5fd; }
+    .flow-arrow { color: #475569; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>FlakeShield — High-Level Architecture</h1>
+    <p class="subtitle">Current state: CLI-first CI intelligence engine | Next phase: policy-driven CI product | Future: FlakeShield Plus platform</p>
+
+    <div class="section">
+      <h2><span class="num">1</span> System Architecture Diagram</h2>
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-box input">GitHub Actions / CI Pipelines</div>
+          <div class="arch-box input">Local CLI / Uploaded JUnit XML</div>
+          <div class="arch-box input">Future Hosted API</div>
+        </div>
+        <div class="arch-arrow-down">|</div>
+        <div class="arch-label">JUnit XML / workflow artifacts / API uploads</div>
+
+        <div class="arch-row">
+          <div class="arch-box det">Deterministic Core<br><small>authoritative</small></div>
+          <span class="arch-arrow">&harr;</span>
+          <div class="arch-box sem">Semantic Layer<br><small>optional, advisory</small></div>
+        </div>
+        <div class="arch-label">Fingerprinting, grouping, flaky detection ↔ known/novel, similarity, semantic grouping</div>
+        <div class="arch-arrow-down">|</div>
+
+        <div class="arch-row">
+          <div class="arch-box policy">Decision Intelligence + Policy Engine</div>
+        </div>
+        <div class="arch-label">Risk scoring, tiers, regression detection, warn/fail policy flags</div>
+        <div class="arch-arrow-down">|</div>
+
+        <div class="arch-row">
+          <div class="arch-box state">SQLite Now / Postgres Later</div>
+        </div>
+        <div class="arch-label">test_results, failure_embeddings, run history, future trend intelligence</div>
+        <div class="arch-arrow-down">|</div>
+
+        <div class="arch-row">
+          <div class="arch-box output">JSON / Markdown / CLI Summary</div>
+          <div class="arch-box output">PR Comment / GitHub Action</div>
+        </div>
+        <div class="arch-arrow-down">|</div>
+
+        <div class="arch-row">
+          <div class="arch-box future">Future Product Surface<br><small>dashboard, aggregation, notifications</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2><span class="num">2</span> Product Shape: Now vs Next vs Later</h2>
+      <div class="card">
+<pre>PAST
+[JUnit XML parser]
+      ↓
+[Fingerprint grouping]
+      ↓
+[Flake detection]
+      ↓
+[JSON report]
+
+NOW
+[JUnit XML / CI]
+      ↓
+[Deterministic core] ---- authoritative
+      ↓
+[Semantic advisory layer] ---- optional, gated
+      ↓
+[Risk scoring + tiers]
+      ↓
+[Regression detection]
+      ↓
+[Policy flags]
+      ↓
+[CLI / JSON / PR summary / GitHub Action]
+
+NEXT
+[GitHub Action validated externally]
+      ↓
+[Release + reusable adoption]
+      ↓
+[Multi-repo history]
+      ↓
+[Hosted ingestion]
+      ↓
+[Dashboard + notifications]
+      ↓
+[FlakeShield Plus platform]</pre>
+      </div>
+      <div class="highlight">
+        <p><strong>Mental model:</strong> FlakeShield today tells you what is happening in CI. FlakeShield next tells you what matters most. FlakeShield Plus later enforces how CI should respond.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2><span class="num">3</span> Core Architecture (Current Product)</h2>
+      <div class="grid">
+        <div class="grid-card">
+          <h4><span class="tag det">Deterministic Core</span></h4>
+          <ul>
+            <li>Parse JUnit XML to canonical events</li>
+            <li>Normalize traceback/message into stable fingerprints</li>
+            <li>Group failures deterministically</li>
+            <li>Detect flaky tests across runs</li>
+            <li>Compute explainable confidence</li>
+            <li>Remain authoritative at all times</li>
+          </ul>
+        </div>
+        <div class="grid-card">
+          <h4><span class="tag sem">Semantic Advisory Layer</span></h4>
+          <ul>
+            <li>Embed failure text</li>
+            <li>Known vs novel classification</li>
+            <li>Historical similarity lookup</li>
+            <li>Semantic failure grouping</li>
+            <li>Risk enrichment only</li>
+            <li>Optional, gated, non-blocking</li>
+          </ul>
+        </div>
+        <div class="grid-card">
+          <h4><span class="tag policy">Decision Intelligence</span></h4>
+          <ul>
+            <li>Risk scoring</li>
+            <li>Risk tiers: LOW / MEDIUM / HIGH / CRITICAL</li>
+            <li>Regression detection (latest vs previous run)</li>
+            <li>Policy flags: warn/fail/threshold</li>
+            <li>CLI high-risk summary</li>
+            <li>PR summary generation</li>
+          </ul>
+        </div>
+        <div class="grid-card">
+          <h4><span class="tag state">State Layer</span></h4>
+          <ul>
+            <li>SQLite as source of truth</li>
+            <li><code>test_results</code> authoritative table</li>
+            <li><code>failure_embeddings</code> for semantic memory</li>
+            <li>Idempotent inserts</li>
+            <li>History-backed analysis</li>
+            <li>Postgres planned later for hosted mode</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2><span class="num">4</span> Data Model (Current + Near-Term)</h2>
+      <table>
+        <thead>
+          <tr><th>Store / Table</th><th>Key Fields</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>test_results</code></td>
+            <td><code>run_id</code>, <code>test_id</code>, <code>status</code>, <code>message</code>, <code>traceback</code>, <code>fingerprint</code></td>
+            <td>Canonical run history; deterministic source of truth</td>
+          </tr>
+          <tr>
+            <td><code>failure_embeddings</code></td>
+            <td><code>fingerprint</code>, <code>model_name</code>, <code>dim</code>, <code>vector</code>, <code>created_at</code></td>
+            <td>Persist semantic memory for known/novel and similarity lookup</td>
+          </tr>
+          <tr>
+            <td><code>reports</code> (derived)</td>
+            <td>JSON, Markdown, PR comment markdown</td>
+            <td>Presentation layer over stored DB state</td>
+          </tr>
+          <tr>
+            <td><code>future trends</code></td>
+            <td><code>first_seen</code>, <code>last_seen</code>, <code>risk trend</code>, <code>flake trend</code></td>
+            <td>Planned multi-run health and multi-repo analytics</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="highlight">
+        <p><strong>Guarantee:</strong> Reports are views over persisted DB truth. Deterministic logic always runs; semantic logic may enrich but never replace it.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2><span class="num">5</span> Product Flow</h2>
+      <div class="card">
+        <p><strong>Ingestion + analysis flow:</strong></p>
+        <div class="module-flow">
+          <span class="module-chip">JUnit XML</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">CLI / GitHub Action</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">Canonical Events</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">Fingerprinting</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">SQLite Persistence</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">Risk / Regression / Policy</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip">Reports + PR Summary</span>
+        </div>
+        <br />
+        <p><strong>Policy flow:</strong></p>
+        <div class="module-flow">
+          <span class="module-chip">Risk tiers</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">warn-on-high</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">fail-on-critical</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">max-risk-threshold</span>
+        </div>
+        <br />
+        <p><strong>Distribution flow:</strong></p>
+        <div class="module-flow">
+          <span class="module-chip">CLI</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">GitHub Action</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip active">Docker runtime</span>
+          <span class="flow-arrow">&rarr;</span>
+          <span class="module-chip">Future hosted platform</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2><span class="num">6</span> Output Surface</h2>
+      <table>
+        <thead>
+          <tr><th>Surface</th><th>Current State</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>CLI</td><td>Shipped</td><td>Local and CI execution surface</td></tr>
+          <tr><td>JSON report</td><td>Shipped</td><td>Machine-readable contract for downstream tooling</td></tr>
+          <tr><td>Markdown report</td><td>Shipped</td><td>Human-readable CI triage artifact</td></tr>
+          <tr><td>CLI high-risk summary</td><td>Shipped</td><td>Immediate prioritization signal</td></tr>
+          <tr><td>PR summary markdown</td><td>Shipped</td><td>Review-friendly PR context</td></tr>
+          <tr><td>GitHub Action</td><td>Shipped / validating</td><td>Drop-in CI integration</td></tr>
+          <tr><td>Hosted API</td><td>Future</td><td>Centralized ingestion and team workflows</td></tr>
+          <tr><td>Dashboard</td><td>Future</td><td>Trend and multi-repo visibility</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2><span class="num">7</span> Roadmap Layers</h2>
+      <div class="grid">
+        <div class="grid-card">
+          <h4>Layer 1 — Engine</h4>
+          <p>Deterministic grouping, flaky detection, semantic assist, scoring, contract freeze.</p>
+        </div>
+        <div class="grid-card">
+          <h4>Layer 2 — Product</h4>
+          <p>Packaging, config, policy flags, PR summary, action wrapper, Docker runtime.</p>
+        </div>
+        <div class="grid-card">
+          <h4>Layer 3 — Runtime</h4>
+          <p>External validation in a separate repo, artifact upload, PR comment flow, action hardening.</p>
+        </div>
+        <div class="grid-card">
+          <h4>Layer 4 — Distribution</h4>
+          <p>Release, Marketplace-grade action, example repos, reusable adoption path.</p>
+        </div>
+        <div class="grid-card">
+          <h4>Layer 5 — Platform</h4>
+          <p>Hosted ingestion, multi-repo aggregation, trends, notifications, team settings.</p>
+        </div>
+        <div class="grid-card">
+          <h4>Layer 6 — FlakeShield Plus</h4>
+          <p>Dashboard, governance, org-wide CI reliability control, later explanation layer.</p>
+        </div>
+      </div>
+      <div class="highlight">
+        <p><strong>Rule:</strong> the roadmap compounds from reliable intelligence → CI product surface → runtime validation → distribution → platform. It does not jump straight to dashboards or LLM layers.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2><span class="num">8</span> Ultimate Product Mockup</h2>
+      <div class="card">
+<pre>┌──────────────────────────────────────────────────────────────┐
+│ FlakeShield Plus                                             │
+│ CI Reliability Control Center                                │
+├──────────────────────────────────────────────────────────────┤
+│ Repo: payments-service                                       │
+│ Branch: feature/refund-fix                                   │
+│ Last Run: 3 mins ago                                         │
+├──────────────────────────────────────────────────────────────┤
+│ HIGH RISK NOW                                                │
+│ 1. database timeout in checkout path        CRITICAL  0.91   │
+│ 2. connection refused in refund service      HIGH     0.77   │
+│ 3. flaky auth token expiry test              MEDIUM   0.54   │
+├──────────────────────────────────────────────────────────────┤
+│ REGRESSIONS                                                  │
+│ - checkout timeout appeared since run_182                    │
+│ - refund service connection error new today                  │
+├──────────────────────────────────────────────────────────────┤
+│ KNOWN VS NOVEL                                               │
+│ - 2 known failures                                           │
+│ - 1 novel failure                                            │
+├──────────────────────────────────────────────────────────────┤
+│ FLAKE HEALTH                                                 │
+│ - 3 flaky tests                                              │
+│ - 1 worsening trend                                          │
+│ - confidence: medium                                         │
+├──────────────────────────────────────────────────────────────┤
+│ ACTIONS                                                      │
+│ [View PR summary] [Download report] [Apply policy]           │
+│ [Suppress known issue] [Open dashboard]                      │
+└──────────────────────────────────────────────────────────────┘</pre>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
