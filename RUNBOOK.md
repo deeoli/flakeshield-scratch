@@ -57,18 +57,15 @@ On the first run with --enable-semantic, the embedding model may download from H
 
 Subsequent runs will use the cached model and be fast.
 
-CI Recommendation
+CI Usage
 
-In CI environments:
+Semantic mode is now validated for CI use as an advisory layer:
 
-- Deterministic mode is the authoritative signal.
-- Semantic mode is advisory only.
-- CI should not require network access.
-
-It is recommended to:
-
-- Either disable `--enable-semantic` in CI
-- Or preload the embedding model in the build environment
+- Works in GitHub Actions Docker environment
+- Failures are non-blocking (degrade to deterministic-only)
+- HF Hub unauthenticated warning is acceptable
+- `embeddings.position_ids` unexpected load note is normal
+- Use `enable_semantic: "true"` in GitHub Action inputs
 
 Semantic failures (model load errors, network issues, etc.) are:
 
@@ -77,7 +74,82 @@ Semantic failures (model load errors, network issues, etc.) are:
 - Reported with `metrics.semantic_enabled = false`
 
 
-## Verification (Week 4 Schema)
+## GitHub Action Runtime Validation
+
+### Step 1: Local Action Testing
+
+Test the Docker action locally before CI deployment:
+
+```bash
+# Build the action image
+docker build -t flakeshield-action .
+
+# Test with sample data
+docker run --rm -v $(pwd):/workspace \
+  -e INPUT_REPORTS="examples/report*.xml" \
+  -e INPUT_ENABLE_SEMANTIC="true" \
+  -e INPUT_WARN_ON_HIGH="true" \
+  flakeshield-action
+```
+
+### Step 2: Workflow Integration
+
+Add to `.github/workflows/ci.yml`:
+
+```yaml
+- name: Run tests
+  run: pytest --junitxml=outputs/junit.xml
+
+- uses: ./  # or your published action
+  with:
+    reports: "outputs/junit.xml"
+    enable_semantic: "true"
+    warn_on_high: "true"
+    fail_on_critical: "true"
+    max-risk-threshold: "0.80"
+```
+
+### Step 3: Policy Flag Testing
+
+Test blocking behavior:
+
+```yaml
+# Warning mode (non-blocking)
+- uses: ./ 
+  with:
+    reports: "outputs/junit.xml"
+    enable_semantic: "true"
+    warn_on_high: "true"
+
+# Blocking mode
+- uses: ./
+  with:
+    reports: "outputs/junit.xml"
+    enable_semantic: "true"
+    max-risk-threshold: "0.80"  # Fails CI if any score >= 0.80
+```
+
+### Troubleshooting
+
+**HF Hub unauthenticated warning:**
+- Expected and non-fatal
+- Model downloads work without authentication
+- No action needed
+
+**embeddings.position_ids unexpected load note:**
+- Normal for this model architecture
+- Does not affect functionality
+- Safe to ignore
+
+**Semantic layer failures:**
+- Automatically degrades to deterministic-only
+- CI continues running
+- Check `metrics.semantic_enabled` in report
+
+**Policy enforcement not working:**
+- Ensure `enable_semantic: "true"` is set
+- Policy flags only work with semantic mode enabled
+- Check that `max-risk-threshold` input is a string (e.g., "0.80")
 
 ### Step 1: Run Deterministic Command
 

@@ -108,14 +108,9 @@ cat outputs/flake_report.json | python -m json.tool
 
 ---
 
-## GitHub Actions
+## GitHub Action (Validated)
 
-Drop the following file in your repository at
-`.github/workflows/flakeshield.yml` to get an automatic triage run on
-every pull request.  It installs the package, runs your tests with
-JUnit output, executes FlakeShield deterministically (and semantically
-as an optional, non‑blocking step) and uploads the generated report
-artifacts.
+Use FlakeShield as a drop-in CI step with the Docker-based GitHub Action:
 
 ```yaml
 name: FlakeShield
@@ -125,46 +120,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  flakeshield:
+  flakecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -e .
       - name: Run tests
         run: |
           mkdir -p outputs
           pytest --junitxml=outputs/junit.xml
-      - name: Run FlakeShield (deterministic)
-        run: |
-          flakeshield --reports "outputs/junit.xml" \
-                     --out outputs/flake_report \
-                     --db outputs/flakeshield.db
-      - name: Run FlakeShield (semantic, non-blocking)
-        run: |
-          flakeshield --reports "outputs/junit.xml" \
-                     --out outputs/flake_report \
-                     --db outputs/flakeshield.db \
-                     --enable-semantic
-        continue-on-error: true
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+      - uses: ./            # or flakeshield/action@v0.4.0
         with:
-          name: flakeshield-reports
-          path: |
-            outputs/flake_report.json
-            outputs/flake_report.md
-            outputs/flakeshield.db
+          reports: "outputs/junit.xml"
+          enable_semantic: "true"        # optional
+          warn_on_high: "true"           # optional
+          fail_on_critical: "true"       # optional
+          max-risk-threshold: "0.80"     # optional
 ```
 
----
+**Behavior:**
+- By default, FlakeShield is **non-blocking** and provides advisory output
+- When policy flags are enabled (`warn_on_high`, `fail_on_critical`, `max-risk-threshold`), it can fail CI
+- Generates artifacts: `outputs/flake_report.json`, `outputs/flake_report.md`, `outputs/flakeshield.db`
+- On PRs, automatically posts/updates a comment with the report summary
+
+**Inputs:**
+- `reports` – glob for XMLs (required)
+- `enable_semantic` – enable semantic mode (default: "false")
+- `warn_on_high` – print warnings for HIGH/CRITICAL risks (default: "false")
+- `fail_on_critical` – exit nonzero on CRITICAL risks (default: "false")
+- `max-risk-threshold` – exit nonzero if any risk_score ≥ threshold (default: "")
+- `out_prefix` – output path prefix (default: "outputs/flake_report")
+- `db_path` – SQLite database path (default: "outputs/flakeshield.db")
 
 
 ---
@@ -211,52 +197,9 @@ All semantic features are fully test-covered and CI-safe.
 
 ---
 
-## GitHub Action Usage
-
-You can use FlakeShield as a reusable action instead of copying YAML verbatim.
-The repository includes a Docker-based action at the root (`action.yml`) which
-wraps the CLI in a self-contained container.  When you publish a release the
-action can be referenced via a tag (e.g. `flakeshield/action@v0.4.0`).  A
-sample workflow looks like:
-
-```yaml
-jobs:
-  flakecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run tests
-        run: pytest --junitxml=outputs/junit.xml
-      - uses: ./            # local action (or flakeshield/action@v0.4.0)
-        with:
-          reports: "outputs/junit.xml"
-          enable_semantic: "true"        # optional
-          fail_on_critical: "true"       # optional
-```
-
-The Docker action brings these benefits:
-
-* no Python setup/installation step on the runner
-* deterministic environment (built once in container)
-* faster startup and caching when pulled from registry
-
-Inputs mirror the CLI flags and default sensibly:
-* `reports` – glob for XMLs (required)
-* `enable_semantic`, `warn_on_high`, `fail_on_critical` – booleans
-* `max-risk-threshold` – float
-* `out_prefix` (default `outputs/flake_report`)
-* `db_path` (default `outputs/flakeshield.db`)
-
-The action installs your code, runs `flakeshield`, and uploads the resulting
-JSON/MD/DB artifacts.  When executed on a pull request the action will
-also generate a PR summary and automatically post or update a comment
-containing the report (no extra configuration needed).
-
----
-
 ## Version
 
-Current version: **0.2.0**
+Current version: **0.4.0**
 
 ---
 

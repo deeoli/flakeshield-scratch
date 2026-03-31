@@ -2,7 +2,7 @@
 
 **Purpose:** Reduce CI noise via deterministic, explainable post-test analysis.
 
-**Current shape:** CLI-first, local-first, DB-backed, reproducible.
+**Current shape:** CLI-first, local-first, DB-backed, reproducible, GitHub Action validated.
 
 ---
 
@@ -33,11 +33,9 @@ NOW (Today)
        ↓
   [Policy flags]
        ↓
-  [CLI / JSON / PR summary / GitHub Action]
+  [CLI / JSON / PR summary / GitHub Action] ---- shipped, validated
 
 NEXT (3-6 months)
-  [GitHub Action validated externally]
-       ↓
   [Release + reusable adoption]
        ↓
   [Multi-repo history]

@@ -1,11 +1,11 @@
 
 ---
 
-# 📦 GitHub Release Notes Draft (v0.2.0)
+# 📦 GitHub Release Notes Draft (v0.4.0)
 
 Title:
 
-FlakeShield v0.2.0 — Installable CI Risk Intelligence
+FlakeShield v0.4.0 — Validated CI Intelligence with Policy Enforcement
 
 Body:
 
@@ -15,22 +15,21 @@ Body:
 
 FlakeShield is a deterministic-first CI signal reduction engine with optional semantic intelligence.
 
-Version 0.2.0 introduces packaging, CLI risk summaries, and a stabilized advisory risk layer.
+Version 0.4.0 introduces Docker-based GitHub Action, policy flags for CI enforcement, regression detection, and external runtime validation.
 
 ---
 
 ## Highlights
 
-* Installable CLI (`flakeshield`)
-* Deterministic flake detection with confidence scoring
-* Stateful persistence via SQLite
-* Known vs novel failure detection
-* Top-k historical similarity (semantic mode)
-* Advisory risk scoring layer
-* CLI high-risk summary
+* Docker-based GitHub Action (externally validated)
+* Policy flags: `warn_on_high`, `fail_on_critical`, `max-risk-threshold`
+* Regression detection (latest vs previous run)
+* PR summary generation and auto-commenting
+* Risk tier classification (LOW/MEDIUM/HIGH/CRITICAL)
+* Config file support
+* Simulation harness for testing
+* 62 passing tests
 * Frozen JSON contract
-* Fully non-blocking semantic layer
-* 46 passing tests
 
 ---
 
@@ -38,8 +37,9 @@ Version 0.2.0 introduces packaging, CLI risk summaries, and a stabilized advisor
 
 * Deterministic core is authoritative
 * Semantic intelligence is optional and reversible
-* CI safety guaranteed (semantic failures never block builds)
-* JSON output contract is test-frozen
+* Policy flags can block CI when enabled
+* External runtime validation completed
+* CI safety guaranteed
 
 ---
 
@@ -51,18 +51,25 @@ pip install -e .
 
 ---
 
-## Example
+## GitHub Action Example
 
-```bash
-flakeshield --reports "examples/report*.xml" --out outputs/flake_report --enable-semantic
+```yaml
+- uses: flakeshield/action@v0.4.0
+  with:
+    reports: "outputs/junit.xml"
+    enable_semantic: "true"
+    warn_on_high: "true"
+    fail_on_critical: "true"
+    max-risk-threshold: "0.80"
 ```
 
 ---
 
-No breaking changes.
-No CI behavior changes.
+## Breaking Changes
 
----
+None.
+
+## After Release
 
 ## After Release
 
