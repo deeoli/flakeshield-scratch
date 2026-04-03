@@ -108,6 +108,68 @@ cat outputs/flake_report.json | python -m json.tool
 
 ---
 
+## GitHub Action (Validated)
+
+Use FlakeShield as a drop-in CI step with the Docker-based GitHub Action:
+
+```yaml
+name: FlakeShield
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  flakecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: |
+          mkdir -p outputs
+          pytest --junitxml=outputs/junit.xml
+      - uses: ./            # or flakeshield/action@v0.4.0
+        with:
+          reports: "outputs/junit.xml"
+          enable_semantic: "true"        # optional
+          warn_on_high: "true"           # optional
+          fail_on_critical: "true"       # optional
+          max-risk-threshold: "0.80"     # optional
+```
+
+**Behavior:**
+- By default, FlakeShield is **non-blocking** and provides advisory output
+- When policy flags are enabled (`warn_on_high`, `fail_on_critical`, `max-risk-threshold`), it can fail CI
+- Generates artifacts: `outputs/flake_report.json`, `outputs/flake_report.md`, `outputs/flakeshield.db`
+- On PRs, automatically posts/updates a comment with the report summary
+
+**Inputs:**
+- `reports` – glob for XMLs (required)
+- `enable_semantic` – enable semantic mode (default: "false")
+- `warn_on_high` – print warnings for HIGH/CRITICAL risks (default: "false")
+- `fail_on_critical` – exit nonzero on CRITICAL risks (default: "false")
+- `max-risk-threshold` – exit nonzero if any risk_score ≥ threshold (default: "")
+- `out_prefix` – output path prefix (default: "outputs/flake_report")
+- `db_path` – SQLite database path (default: "outputs/flakeshield.db")
+
+---
+
+## GitHub Action Example
+
+See the complete example workflow at [examples/flakeshield-action-example.yml](examples/flakeshield-action-example.yml).
+
+Quick start:
+
+```yaml
+- name: Run FlakeShield
+  uses: deeoli/flakeshield-scratch@v0.4.0
+  with:
+    reports: "outputs/junit.xml"
+    enable_semantic: "true"
+```
+
+---
+
 ## Architecture
 
 FlakeShield follows a strict layered design:
@@ -152,7 +214,7 @@ All semantic features are fully test-covered and CI-safe.
 
 ## Version
 
-Current version: **0.2.0**
+Current version: **0.4.0**
 
 ---
 

@@ -1,0 +1,43 @@
+name: "FlakeShield CI Intelligence"
+description: "Runs the FlakeShield CLI to triage JUnit reports inside a workflow."
+
+inputs:
+  reports:
+    description: "Glob pattern for JUnit XML reports."
+    required: true
+  enable_semantic:
+    description: "Enable semantic mode."
+    required: false
+    default: "false"
+  warn_on_high:
+    description: "Add --warn-on-high flag."
+    required: false
+    default: "false"
+  fail_on_critical:
+    description: "Add --fail-on-critical flag."
+    required: false
+    default: "false"
+  max-risk-threshold:
+    description: "Threshold for --max-risk-threshold."
+    required: false
+    default: ""
+  out_prefix:
+    description: "Base path for output files."
+    required: false
+    default: "outputs/flake_report"
+  db_path:
+    description: "SQLite DB path."
+    required: false
+    default: "outputs/flakeshield.db"
+
+runs:
+  using: docker
+  image: Dockerfile
+  args:
+    - "${{ inputs.reports }}"
+    - "${{ inputs.out_prefix }}"
+    - "${{ inputs.db_path }}"
+    - "${{ inputs.enable_semantic }}"
+    - "${{ inputs.warn_on_high }}"
+    - "${{ inputs.fail_on_critical }}"
+    - "${{ inputs.max-risk-threshold }}"

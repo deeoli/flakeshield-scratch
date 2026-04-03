@@ -14,7 +14,8 @@ dist/
 build/
 
 # Outputs / artifacts
-outputs/
+outputs/tools/simulation/temp_demo
+tools/simulation/temp_demo/*
 tools/simulation/out/*
 !tools/simulation/out/.gitkeep
 

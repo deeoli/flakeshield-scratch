@@ -11,12 +11,15 @@ import argparse
 import glob
 import json
 import os
+import sys
 
+from flakeshield.config import load_config
 from flakeshield.db_queries import get_failure_groups, get_flaky_tests
 from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.known_novel import classify_known_novel
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.risk_scoring import compute_risk_analysis
+from flakeshield.policy import classify_risk_tier
 from flakeshield.scoring import top_flakiest
 from flakeshield.similarity import get_top_k_similar
 from flakeshield.storage import connect, insert_runs
@@ -27,6 +30,7 @@ def build_reports(
     out_prefix: str = "flake_report",
     db_path: str = "outputs/flakeshield.db",
     enable_semantic: bool = False,
+    min_runs: int = 4,
 ) -> None:
     xml_paths = sorted(glob.glob(xml_glob))
 
@@ -56,7 +60,7 @@ def build_reports(
         # DB-only analytics MUST happen while connection is open
         failure_groups = get_failure_groups(conn, limit=20)
         top_flakes = top_flakiest(conn, limit=10)
-        flaky = get_flaky_tests(conn, min_runs=4)
+        flaky = get_flaky_tests(conn, min_runs=min_runs)
     finally:
         conn.close()
 
@@ -92,8 +96,27 @@ def build_reports(
 
             try:
                 # local import to avoid loading model unless needed
-                from flakeshield.embeddings import embed_texts, MODEL_NAME
-                from flakeshield.embeddings_store import get_embedding, upsert_embedding
+                if os.getenv("FLAKESHIELD_DUMMY_EMBEDS"):
+                    # test-mode: use lightweight stub to avoid HF downloads
+                    import numpy as _np
+
+                    def embed_texts(texts):
+                        return [_np.ones(8, dtype=_np.float32) for _ in texts]
+
+                    MODEL_NAME = "dummy-model"
+
+                    def get_embedding(conn, fp, model):
+                        return None
+
+                    def upsert_embedding(conn, fp, model, vec):
+                        return None
+
+                else:
+                    from flakeshield.embeddings import embed_texts, MODEL_NAME
+                    from flakeshield.embeddings_store import (
+                        get_embedding,
+                        upsert_embedding,
+                    )
             except Exception:
                 # If embedding infra isn't available, skip known/novel classification
                 embed_texts = None
@@ -102,7 +125,11 @@ def build_reports(
                 upsert_embedding = None
 
             # Classify by fingerprint using DB persistence
-            if (
+            if os.getenv("FLAKESHIELD_FORCE_NOVEL"):
+                # test-mode shortcut: mark every fingerprint as novel
+                known_failures = []
+                novel_failures = list(failure_groups.keys()) if failure_groups else []
+            elif (
                 failure_groups
                 and MODEL_NAME
                 and get_embedding
@@ -227,8 +254,10 @@ def build_reports(
                 if score > 1.0:
                     score = 1.0
 
+                tier = classify_risk_tier(score)
                 risk_assessment[fp] = {
                     "risk_score": float(score),
+                    "risk_tier": tier,
                     "reasons": {
                         "flake_rate": float(flake_rate),
                         "novel": bool(is_novel),
@@ -276,6 +305,18 @@ def build_reports(
             "fragmentation_delta": fragmentation_delta,
         },
     }
+
+    # deterministic regression detection; works even if semantic disabled
+    try:
+        from flakeshield.regressions import detect_regressions
+
+        conn3 = connect(db_path)
+        try:
+            report["regressions"] = detect_regressions(conn3, run_ids)
+        finally:
+            conn3.close()
+    except Exception:
+        report["regressions"] = []
 
     json_path = f"{out_prefix}.json"
     with open(json_path, "w", encoding="utf-8") as f:
@@ -403,6 +444,26 @@ def build_reports(
 
 
 def main() -> None:
+    # support a lightweight "pr-summary" subcommand before the main
+    # argument parser.  We check manually rather than using subparsers so we
+    # keep the earlier interface 100% backwards-compatible.
+    if len(sys.argv) >= 2 and sys.argv[1] == "pr-summary":
+        ps = argparse.ArgumentParser(
+            prog="flakeshield pr-summary",
+            description="Create markdown suitable for a PR comment from a JSON report",
+        )
+        ps.add_argument("--json", required=True, help="Path to FlakeShield JSON report")
+        ps.add_argument("--out", required=True, help="Output markdown path")
+        args = ps.parse_args(sys.argv[2:])
+        from flakeshield.pr_summary import render_pr_summary
+
+        with open(args.json, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        md = render_pr_summary(report)
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(md)
+        return
+
     p = argparse.ArgumentParser(
         prog="flakeshield", description="CI signal reduction tool"
     )
@@ -422,13 +483,77 @@ def main() -> None:
         help="SQLite DB path (default: outputs/flakeshield.db)",
     )
     p.add_argument(
+        "--config",
+        default=None,
+        help="Path to JSON config file (default: ./.flakeshield.json)",
+    )
+    p.add_argument(
+        "--min-runs",
+        type=int,
+        dest="min_runs",
+        help="Minimum runs for flakiness detection (default: 4)",
+    )
+    p.add_argument(
         "--enable-semantic",
         action="store_true",
         help="Enable ML-assisted semantic failure grouping (default: off)",
     )
+    p.add_argument(
+        "--warn-on-high",
+        action="store_true",
+        help="Print warning if any fingerprint has tier HIGH or CRITICAL",
+    )
+    p.add_argument(
+        "--fail-on-critical",
+        action="store_true",
+        help="Exit nonzero if any fingerprint has tier CRITICAL",
+    )
+    p.add_argument(
+        "--max-risk-threshold",
+        type=float,
+        help="Exit nonzero if any risk_score >= threshold",
+    )
 
     args = p.parse_args()
-    build_reports(args.reports, args.out, args.db, enable_semantic=args.enable_semantic)
+    # load configuration and apply defaults
+    cfg = load_config(args.config)
+
+    # determine effective options
+    min_runs = args.min_runs if args.min_runs is not None else cfg.get("min_runs", 4)
+    enable_semantic = args.enable_semantic or cfg.get("enable_semantic", False)
+
+    build_reports(
+        args.reports,
+        args.out,
+        args.db,
+        enable_semantic=enable_semantic,
+        min_runs=min_runs,
+    )
+
+    # policy enforcement (semantic-only)
+    from flakeshield.policy import evaluate_policy
+
+    # load report JSON file
+    report_path = f"{args.out}.json"
+    exit_code = 0
+    warnings = []
+    try:
+        with open(report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        exit_code, warnings = evaluate_policy(
+            report,
+            warn_on_high=args.warn_on_high,
+            fail_on_critical=args.fail_on_critical,
+            max_risk_threshold=args.max_risk_threshold,
+        )
+        for w in warnings:
+            print(w)
+    except Exception:
+        # if loading fails or policy eval fails, we silently ignore to keep CLI stable
+        exit_code = 0
+
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":

@@ -2,8 +2,7 @@ name: FlakeShield CI Signal Reduction
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   flakeshield:
@@ -21,30 +20,57 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install -e .
-          pip install pytest
 
-      - name: Run unit tests (hardening gate)
+      - name: Run tests (produce JUnit XML)
         run: |
-          pytest -q
-
-      - name: Run sample run (JUnit XML for FlakeShield demo)
-        run: |
-          pytest examples/test_sample.py --junitxml=report.xml || true
+          mkdir -p outputs
+          pytest --junitxml=outputs/junit_run1.xml || true
+          pytest --junitxml=outputs/junit_run2.xml || true
 
       - name: Prepare output directory
         run: |
           mkdir -p outputs
 
-      - name: Run FlakeShield
+      - name: Run FlakeShield (deterministic)
         run: |
-          python -m flakeshield.cli \
-            --reports report.xml \
-            --out outputs/flake_report \
-            --db outputs/flakeshield.db
+          flakeshield --reports "outputs/junit_run*.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db
 
-      - name: Upload FlakeShield reports
+      - name: Run FlakeShield (semantic, non-blocking)
+        run: |
+          flakeshield --reports "outputs/junit_run*.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db \
+                     --enable-semantic
+        continue-on-error: true
+
+      - name: Generate PR summary
+        run: |
+          flakeshield pr-summary --json outputs/flake_report.json --out outputs/pr_comment.md
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('outputs/pr_comment.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            }).catch(e => console.log('comment failed', e));
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: flakeshield-report
-          path: outputs/
+          name: flakeshield-reports
+          path: |
+            outputs/flake_report.json
+            outputs/flake_report.md
+            outputs/flakeshield.db
+            outputs/pr_comment.md

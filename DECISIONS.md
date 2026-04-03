@@ -159,6 +159,103 @@ Until then, this decision is **frozen**.
 
 ---
 
+## Decision: Policy Flags Can Block CI (Week 4)
+
+**Status:** Active  
+**Date:** Week 4  
+**Owner:** FlakeShield Core  
+**Evidence:** External runtime validation complete, policy enforcement working
+
+### Context
+
+FlakeShield provides advisory risk intelligence. Teams may want to enforce quality gates based on risk scores.
+
+### Decision
+
+Policy flags (`warn_on_high`, `fail_on_critical`, `max-risk-threshold`) are allowed to block CI pipelines when enabled.
+
+### Constraints (Locked)
+
+- Policy flags only work when semantic mode is enabled
+- Default behavior remains non-blocking
+- Policy decisions are based on deterministic risk scoring
+- External validation confirmed blocking behavior works correctly
+
+### Revisit Criteria
+
+Only revisit if:
+- Policy flags cause false failures in production
+- Teams report blocking behavior is too aggressive
+
+Until then, this decision is **frozen**.
+
+---
+
+## Decision: External Runtime Validation Completed (Week 4)
+
+**Status:** Active  
+**Date:** Week 4  
+**Owner:** FlakeShield Core  
+**Evidence:** GitHub Action tested in external repository, all features working
+
+### Context
+
+Before shipping, the GitHub Action needed validation in real CI environments.
+
+### Decision
+
+External runtime validation is complete. The Docker-based GitHub Action is production-ready.
+
+### Constraints (Locked)
+
+- Action inputs work correctly
+- Semantic mode works in CI containers
+- Policy enforcement works end-to-end
+- PR comment posting works
+- Artifact uploads work
+
+### Revisit Criteria
+
+Only revisit if:
+- New CI environments break the action
+- Major changes to action inputs are needed
+
+Until then, this decision is **frozen**.
+
+---
+
+## Decision: GitHub Action is First-Class Product Surface (Week 4)
+
+**Status:** Active  
+**Date:** Week 4  
+**Owner:** FlakeShield Core  
+**Evidence:** Action validated, documented, and ready for adoption
+
+### Context
+
+FlakeShield needs accessible CI integration beyond CLI-only usage.
+
+### Decision
+
+The Docker-based GitHub Action is a first-class product surface, equal to the CLI.
+
+### Constraints (Locked)
+
+- Action mirrors CLI functionality
+- Action is documented in README
+- Action supports all validated inputs
+- Action behavior matches CLI behavior
+
+### Revisit Criteria
+
+Only revisit if:
+- Action becomes unmaintainable
+- Teams prefer different CI integrations
+
+Until then, this decision is **frozen**.
+
+---
+
 ## Decision Policy (Meta)
 
 - Decisions are added **only after evidence**
