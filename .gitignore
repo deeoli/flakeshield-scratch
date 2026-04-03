@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtualenv
+.venv/
+venv/
+
+# Build / packaging
+*.egg-info/
+dist/
+build/
+
+# Outputs / artifacts
+outputs/tools/simulation/temp_demo
+tools/simulation/temp_demo/*
+tools/simulation/out/*
+!tools/simulation/out/.gitkeep
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Reports
+*.json
+*.md
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

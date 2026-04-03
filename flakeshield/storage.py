@@ -27,9 +27,33 @@ CREATE TABLE IF NOT EXISTS test_results (
   UNIQUE(run_id, test_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_test_results_run_id ON test_results(run_id);
-CREATE INDEX IF NOT EXISTS idx_test_results_test_id ON test_results(test_id);
-CREATE INDEX IF NOT EXISTS idx_test_results_status ON test_results(status);
+CREATE INDEX IF NOT EXISTS idx_test_results_run_id
+  ON test_results(run_id);
+
+CREATE INDEX IF NOT EXISTS idx_test_results_test_id
+  ON test_results(test_id);
+
+CREATE INDEX IF NOT EXISTS idx_test_results_status
+  ON test_results(status);
+
+CREATE INDEX IF NOT EXISTS idx_test_results_fingerprint
+  ON test_results(fingerprint);
+
+CREATE TABLE IF NOT EXISTS failure_embeddings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fingerprint TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(fingerprint, model_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_failure_embeddings_fingerprint
+  ON failure_embeddings(fingerprint);
+
+CREATE INDEX IF NOT EXISTS idx_failure_embeddings_model_name
+  ON failure_embeddings(model_name);
 """
 
 
