@@ -152,6 +152,21 @@ jobs:
 - `out_prefix` – output path prefix (default: "outputs/flake_report")
 - `db_path` – SQLite database path (default: "outputs/flakeshield.db")
 
+---
+
+## GitHub Action Example
+
+See the complete example workflow at [examples/flakeshield-action-example.yml](examples/flakeshield-action-example.yml).
+
+Quick start:
+
+```yaml
+- name: Run FlakeShield
+  uses: deeoli/flakeshield-scratch@v0.4.0
+  with:
+    reports: "outputs/junit.xml"
+    enable_semantic: "true"
+```
 
 ---
 
