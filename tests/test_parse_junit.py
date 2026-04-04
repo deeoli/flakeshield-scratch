@@ -25,7 +25,8 @@ def test_parse_single_testsuite_root():
 
     import tempfile
     import os
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
         f.write(xml_content)
         temp_path = f.name
 
@@ -52,6 +53,7 @@ def test_parse_single_testsuite_root():
     finally:
         # Close any open file handles first
         import gc
+
         gc.collect()
         try:
             os.unlink(temp_path)
@@ -73,7 +75,7 @@ def test_parse_multi_testsuite_root():
     </testsuite>
 </testsuites>"""
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
         f.write(xml_content)
         temp_path = f.name
 
@@ -97,6 +99,7 @@ def test_parse_multi_testsuite_root():
     finally:
         # Close any open file handles first
         import gc
+
         gc.collect()
         try:
             os.unlink(temp_path)
@@ -121,7 +124,7 @@ def test_parse_multi_testsuite_with_failures():
     </testsuite>
 </testsuites>"""
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
         f.write(xml_content)
         temp_path = f.name
 
@@ -146,6 +149,7 @@ def test_parse_multi_testsuite_with_failures():
     finally:
         # Close any open file handles first
         import gc
+
         gc.collect()
         try:
             os.unlink(temp_path)

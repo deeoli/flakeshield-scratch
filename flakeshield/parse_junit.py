@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from flakeshield.contracts import TestRun
 
+
 def _text(el: Optional[ET.Element]) -> Optional[str]:
     """
     Safely extract inner text from an XML element.
@@ -68,7 +69,9 @@ def parse_pytest_junit(xml_path: str) -> TestRun:
     elif root.tag == "testsuites":
         testsuites = root.findall("testsuite")
         if not testsuites:
-            raise ValueError("Could not find any <testsuite> elements in <testsuites> root.")
+            raise ValueError(
+                "Could not find any <testsuite> elements in <testsuites> root."
+            )
     else:
         # Fallback: search for testsuite children
         testsuites = root.findall("testsuite")
