@@ -10,7 +10,12 @@ COPY . /app
 RUN chmod +x entrypoint.sh
 
 # Install the package and dependencies
-RUN pip install --no-cache-dir .
+ARG INSTALL_SEMANTIC=false
+RUN if [ "$INSTALL_SEMANTIC" = "true" ]; then \
+        pip install --no-cache-dir ".[semantic]"; \
+    else \
+        pip install --no-cache-dir .; \
+    fi
 
 # Default entrypoint uses our helper script that maps inputs to flags
 ENTRYPOINT ["sh", "/app/entrypoint.sh"]

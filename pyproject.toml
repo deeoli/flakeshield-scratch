@@ -25,10 +25,12 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "sentence-transformers",
 ]
 
 [project.optional-dependencies]
+semantic = [
+    "sentence-transformers",
+]
 dev = [
     "pytest>=8.0",
 ]
