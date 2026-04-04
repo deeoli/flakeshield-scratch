@@ -16,12 +16,27 @@ jobs:
           mkdir -p outputs
           pytest --junitxml=outputs/junit.xml || true
 
+      - name: Restore FlakeShield DB cache
+        uses: actions/cache@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            flakeshield-db-${{ github.ref }}-
+
       - name: Run FlakeShield
         uses: deeoli/flakeshield-scratch@v0.4.0
         with:
           reports: "outputs/junit.xml"
           enable_semantic: "true"
           warn_on_high: "true"
+
+      - name: Save FlakeShield DB cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

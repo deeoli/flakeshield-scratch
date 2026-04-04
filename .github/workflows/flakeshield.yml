@@ -33,6 +33,14 @@ jobs:
         run: |
           mkdir -p outputs
 
+      - name: Restore FlakeShield DB cache
+        uses: actions/cache@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            flakeshield-db-${{ github.ref }}-
+
       - name: Run FlakeShield (deterministic)
         run: |
           flakeshield --reports "outputs/junit_run*.xml" \
@@ -64,6 +72,13 @@ jobs:
               repo: context.repo.repo,
               body,
             }).catch(e => console.log('comment failed', e));
+
+      - name: Save FlakeShield DB cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
