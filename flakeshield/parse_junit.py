@@ -62,78 +62,83 @@ def parse_pytest_junit(xml_path: str) -> TestRun:
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
-    # Pytest usually wraps everything in <testsuites><testsuite>
-    # but sometimes the root is directly <testsuite>
-    testsuite = root.find("testsuite")
-    if testsuite is None:
-        if root.tag == "testsuite":
-            testsuite = root
-        else:
+    # Handle both single <testsuite> root and <testsuites> with multiple <testsuite> children
+    if root.tag == "testsuite":
+        testsuites = [root]
+    elif root.tag == "testsuites":
+        testsuites = root.findall("testsuite")
+        if not testsuites:
+            raise ValueError("Could not find any <testsuite> elements in <testsuites> root.")
+    else:
+        # Fallback: search for testsuite children
+        testsuites = root.findall("testsuite")
+        if not testsuites:
             raise ValueError("Could not find <testsuite> element in XML.")
 
     # Run-level metadata
     run_id = os.path.basename(xml_path)  # stable, reproducible
-    suite = testsuite.attrib.get("name")
+    suite = testsuites[0].attrib.get("name") if testsuites else None
 
     cases: List[Dict[str, Any]] = []
 
-    # Iterate through each test case in the suite
-    for tc in testsuite.findall("testcase"):
-        classname = tc.attrib.get("classname", "")
-        name = tc.attrib.get("name", "")
+    # Iterate through each testsuite and collect all testcases
+    for testsuite in testsuites:
+        for tc in testsuite.findall("testcase"):
+            classname = tc.attrib.get("classname", "")
+            name = tc.attrib.get("name", "")
 
-        # Stable identity across runs
-        test_id = f"{classname}::{name}".strip("::")
+            # Stable identity across runs
+            test_id = f"{classname}::{name}".strip("::")
 
-        # Status is inferred from child tags
-        failure = tc.find("failure")
-        error = tc.find("error")
-        skipped = tc.find("skipped")
+            # Status is inferred from child tags
+            failure = tc.find("failure")
+            error = tc.find("error")
+            skipped = tc.find("skipped")
 
-        if failure is not None:
-            status = "failed"
-            message = failure.attrib.get("message")
-            failure_type = failure.attrib.get("type")
-            traceback = _text(failure)
+            if failure is not None:
+                status = "failed"
+                message = failure.attrib.get("message")
+                failure_type = failure.attrib.get("type")
+                traceback = _text(failure)
 
-        elif error is not None:
-            status = "error"
-            message = error.attrib.get("message")
-            failure_type = error.attrib.get("type")
-            traceback = _text(error)
+            elif error is not None:
+                status = "error"
+                message = error.attrib.get("message")
+                failure_type = error.attrib.get("type")
+                traceback = _text(error)
 
-        elif skipped is not None:
-            status = "skipped"
-            message = skipped.attrib.get("message")
-            failure_type = skipped.attrib.get("type")
-            # Keeping skipped text helps humans understand why
-            traceback = _text(skipped)
+            elif skipped is not None:
+                status = "skipped"
+                message = skipped.attrib.get("message")
+                failure_type = skipped.attrib.get("type")
+                # Keeping skipped text helps humans understand why
+                traceback = _text(skipped)
 
-        else:
-            # No child tags → test passed
-            status = "passed"
-            message = None
-            failure_type = None
-            traceback = None
+            else:
+                # No child tags → test passed
+                status = "passed"
+                message = None
+                failure_type = None
+                traceback = None
 
-        # Duration is useful for flake patterns but not mandatory
-        time_str = tc.attrib.get("time")
-        duration_sec = float(time_str) if time_str is not None else None
+            # Duration is useful for flake patterns but not mandatory
+            time_str = tc.attrib.get("time")
+            duration_sec = float(time_str) if time_str is not None else None
 
-        # Append canonical testcase record
-        cases.append(
-            {
-                "run_id": run_id,
-                "suite": suite,
-                "test_id": test_id,
-                "status": status,
-                "duration_sec": duration_sec,
-                "failure_type": failure_type,
-                "message": message,
-                "traceback": traceback,
-                "fingerprint": None,  # derived later (grouping step)
-            }
-        )
+            # Append canonical testcase record
+            cases.append(
+                {
+                    "run_id": run_id,
+                    "suite": suite,
+                    "test_id": test_id,
+                    "status": status,
+                    "duration_sec": duration_sec,
+                    "failure_type": failure_type,
+                    "message": message,
+                    "traceback": traceback,
+                    "fingerprint": None,  # derived later (grouping step)
+                }
+            )
 
     return {
         "run_id": run_id,
