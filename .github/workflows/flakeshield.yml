@@ -26,8 +26,8 @@ jobs:
       - name: Run tests (produce JUnit XML)
         run: |
           mkdir -p outputs
-          pytest --junitxml=outputs/junit_run1.xml || true
-          pytest --junitxml=outputs/junit_run2.xml || true
+          pytest --junitxml=outputs/junit_run1_${{ github.run_id }}.xml || true
+          pytest --junitxml=outputs/junit_run2_${{ github.run_id }}.xml || true
 
       - name: Prepare output directory
         run: |

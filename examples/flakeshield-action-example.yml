@@ -14,7 +14,8 @@ jobs:
       - name: Run tests
         run: |
           mkdir -p outputs
-          pytest --junitxml=outputs/junit.xml || true
+          pytest --junitxml=outputs/junit_run1_${{ github.run_id }}.xml || true
+          pytest --junitxml=outputs/junit_run2_${{ github.run_id }}.xml || true
 
       - name: Restore FlakeShield DB cache
         uses: actions/cache@v4

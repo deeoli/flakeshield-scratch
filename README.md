@@ -170,7 +170,88 @@ Quick start:
 
 ---
 
+## GitHub Actions: Database Persistence & Historical Detection
+
+To accumulate flake history across workflow runs (required for `min_runs=4` detection threshold), configure cache and unique XML filenames:
+
+### 1. Cache the Database
+
+Add cache restore before FlakeShield runs, save after:
+
+```yaml
+jobs:
+  flakeshield:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: |
+          mkdir -p outputs
+          pytest --junitxml=outputs/junit_run1_${{ github.run_id }}.xml || true
+          pytest --junitxml=outputs/junit_run2_${{ github.run_id }}.xml || true
+
+      - name: Restore FlakeShield DB cache
+        uses: actions/cache@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            flakeshield-db-${{ github.ref }}-
+
+      - name: Run FlakeShield
+        uses: deeoli/flakeshield-scratch@v0.4.0
+        with:
+          reports: "outputs/junit_run*.xml"
+          enable_semantic: "true"
+
+      - name: Save FlakeShield DB cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
+```
+
+### 2. ⚠️ CRITICAL: Unique XML Filenames Per Run
+
+**Each workflow run must generate unique XML filenames**, otherwise FlakeShield's database deduplication prevents history accumulation.
+
+**❌ WRONG** (DB won't grow):
+```yaml
+pytest --junitxml=outputs/junit.xml
+```
+
+**✅ CORRECT** (DB accumulates):
+```yaml
+pytest --junitxml=outputs/junit_${{ github.run_id }}.xml
+```
+
+**Why:** `run_id` is derived from XML basename (e.g., `"junit_12345.xml"`). The database uses `UNIQUE(run_id, test_id)` to prevent duplicate test results within the same run. Static filenames create identical run_ids across runs, silently rejecting new history.
+
+### 3. Verify Accumulation
+
+Check DB growth between runs:
+
+```bash
+sqlite3 outputs/flakeshield.db "SELECT COUNT(*) FROM test_results;"
+```
+
+Each run should increase the count. First run: N rows. Second run: N + M rows (where M = new test observations).
+
+### Branch-Aware Caching
+
+The cache key strategy enables per-branch history:
+
+- **main** → `flakeshield-db-refs/heads/main-*`
+- **feature/foo** → `flakeshield-db-refs/heads/feature/foo-*`
+- **PR** → `flakeshield-db-pull/123/merge-*`
+
+Each branch accumulates independent history. Merging a feature branch to main starts with main's history, not feature's.
+
+---
+
 ## Architecture
+
 
 FlakeShield follows a strict layered design:
 
