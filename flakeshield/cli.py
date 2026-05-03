@@ -64,6 +64,13 @@ def build_reports(
     finally:
         conn.close()
 
+    for _grp in failure_groups.values():
+        _examples = _grp.get("examples", [])
+        _grp["flaky"] = any(
+            isinstance(_e, dict) and _e.get("test_id") in flaky
+            for _e in _examples
+        )
+
     print(f"Saved {inserted} test results to {db_path}")
 
     # --- ML-assisted semantic failure groups (OPT-IN, non-authoritative) ---
@@ -145,6 +152,7 @@ def build_reports(
                         embed_texts,
                         get_embedding,
                         upsert_embedding,
+                        current_run_ids=frozenset(run_ids),
                     )
 
                     # Similarity lookup for novel failures (Phase B Step 2)
@@ -227,6 +235,8 @@ def build_reports(
                     is_novel=is_novel,
                     max_similarity=max_similarity_score,
                     runs_seen=total_runs,
+                    failure_count=int(failure_count),
+                    fingerprint=fp,
                 )
 
                 # Apply small penalty if this fingerprint is related to flaky tests

@@ -54,6 +54,7 @@ def test_risk_tier_integration(tmp_path, monkeypatch):
         embed_texts_fn,
         get_embedding,
         upsert_embedding,
+        current_run_ids=None,
     ):
         from flakeshield.fingerprint import fingerprint_failure
 
