@@ -33,13 +33,13 @@ inputs:
 runs:
   using: docker
   image: Dockerfile
+  # Args are appended to ENTRYPOINT (entrypoint.sh). Do not pass docker --build-arg
+  # here — those strings were consumed as $1/$2 and broke --reports mapping.
   args:
-    - "--build-arg"
-    - "INSTALL_SEMANTIC=${{ inputs.enable_semantic }}"
-    - "${{ inputs.reports }}"
-    - "${{ inputs.out_prefix }}"
-    - "${{ inputs.db_path }}"
-    - "${{ inputs.enable_semantic }}"
-    - "${{ inputs.warn_on_high }}"
-    - "${{ inputs.fail_on_critical }}"
-    - "${{ inputs.max-risk-threshold }}"
+    - ${{ inputs.reports }}
+    - ${{ inputs.out_prefix }}
+    - ${{ inputs.db_path }}
+    - ${{ inputs.enable_semantic }}
+    - ${{ inputs.warn_on_high }}
+    - ${{ inputs.fail_on_critical }}
+    - ${{ inputs['max-risk-threshold'] }}

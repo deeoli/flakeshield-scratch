@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -eu
 
 reports="$1"
 out="$2"
