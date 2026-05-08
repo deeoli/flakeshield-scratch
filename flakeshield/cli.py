@@ -11,6 +11,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 from flakeshield.config import load_config
@@ -32,6 +33,23 @@ def build_reports(
     enable_semantic: bool = False,
     min_runs: int = 4,
 ) -> None:
+    ansi_re = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+
+    def _compact_preview(text: str | None, max_chars: int = 160) -> str:
+        """Return markdown-friendly compact preview for noisy failure text."""
+        if not text:
+            return ""
+        cleaned = ansi_re.sub("", str(text))
+        cleaned = cleaned.replace("\r", " ").replace("\n", " ")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if len(cleaned) <= max_chars:
+            return cleaned
+        cut = cleaned[: max_chars - 1]
+        split_at = cut.rfind(" ")
+        if split_at > max_chars // 2:
+            cut = cut[:split_at]
+        return cut.rstrip(" .,;:") + "..."
+
     xml_paths = sorted(glob.glob(xml_glob))
 
     if len(xml_paths) < 2:
@@ -72,6 +90,9 @@ def build_reports(
     fragmentation_delta = None
     novel_failure_matches = {}
     risk_analysis = {}
+    known_failures = []
+    novel_failures = []
+    risk_assessment = {}
 
     # NOTE: get_failure_groups returns dict-like in your implementation
     # If it returns a dict, len(...) gives number of groups.
@@ -329,75 +350,185 @@ def build_reports(
     lines.append(f"- Runs considered: **{len(run_ids)}**")
     lines.append("")
 
-    if not flaky:
-        lines.append("✅ No flaky tests detected.")
-    else:
-        lines.append("## ⚠️ Flaky tests detected")
-        for test_id, data in sorted(flaky.items()):
-            lines.append(
-                f"- **{test_id}** → "
-                f"`{', '.join(data['statuses'])}` "
-                f"(runs={data['runs_seen']}, "
-                f"flake_rate={data['flake_rate']:.2f}, "
-                f"confidence={data['confidence']})"
-            )
-
-    lines.append("")
-    lines.append("## 🔥 Failure groups")
-    if not failure_groups:
-        lines.append("✅ No failures/errors to group.")
-    else:
-        # Your failure_groups appears dict-like: {fingerprint: {count, examples}}
-        sorted_groups = sorted(
-            failure_groups.items(),
-            key=lambda kv: kv[1]["count"],
-            reverse=True,
+    high_risk_count = 0
+    if risk_assessment:
+        high_risk_count = sum(
+            1
+            for info in risk_assessment.values()
+            if info.get("risk_tier") in {"HIGH", "CRITICAL"}
         )
-        for i, (fp, data) in enumerate(sorted_groups, start=1):
-            lines.append(f"### Group {i} — {data['count']} occurrences")
-            lines.append("Fingerprint:")
-            lines.append(f"`{fp[:180]}`")
-            lines.append("Examples:")
-            for ex in data["examples"]:
-                lines.append(
-                    f"- `{ex['run_id']}` — **{ex['test_id']}** — {ex.get('message')}"
+
+    has_failure_groups = bool(failure_groups)
+    has_flaky_tests = bool(flaky)
+    has_high_risk = high_risk_count > 0
+    healthy_run = not has_failure_groups and not has_flaky_tests and not has_high_risk
+
+    # Prioritized "Fix First" list from advisory risk output when available.
+    fix_first: list[tuple[str, dict, dict]] = []
+    if risk_assessment:
+        risk_sorted = sorted(
+            risk_assessment.items(),
+            key=lambda kv: (
+                -float(kv[1].get("risk_score", 0.0)),
+                kv[0],
+            ),
+        )
+        for fp, info in risk_sorted[:5]:
+            group = failure_groups.get(fp, {})
+            fix_first.append((fp, info, group))
+
+    if healthy_run:
+        lines.append("## ✅ CI Looks Healthy")
+        lines.append("")
+        lines.append("No flaky tests or high-risk failures were detected across recent runs.")
+        lines.append("")
+        lines.append("No immediate CI triage appears necessary.")
+        lines.append("")
+
+    lines.append("## 📊 Summary")
+    lines.append(f"- {len(failure_groups)} failure groups")
+    flaky_count = len(flaky)
+    flaky_label = "flaky test" if flaky_count == 1 else "flaky tests"
+    lines.append(f"- {flaky_count} {flaky_label}")
+    lines.append(f"- {high_risk_count} high-risk failures")
+    lines.append("")
+
+    if healthy_run:
+        lines.append("## 🧭 What This Means")
+        lines.append("")
+        lines.append("Your recent CI runs appear stable.")
+        lines.append("")
+        lines.append(
+            "FlakeShield did not detect recurring failures or flaky behavior in this batch."
+        )
+        lines.append("")
+    else:
+        lines.append("## 🔥 Fix First")
+        if not fix_first:
+            lines.append("✅ No prioritized failure groups yet.")
+        else:
+            for fp, info, group in fix_first:
+                examples = group.get("examples", []) if isinstance(group, dict) else []
+                test_id = examples[0].get("test_id") if examples else "unknown_test"
+                seen_runs = len(
+                    {ex.get("run_id") for ex in examples if ex.get("run_id")}
                 )
+                total_runs = int(info.get("reasons", {}).get("runs_seen", len(run_ids)))
+                reasons = info.get("reasons", {}) if isinstance(info, dict) else {}
+                is_novel = bool(reasons.get("novel", False))
+                max_similarity = reasons.get("max_similarity")
+                flake_rate = float(reasons.get("flake_rate", 0.0))
+
+                if is_novel:
+                    why_this_matters = (
+                        "new failure pattern that may indicate a regression."
+                    )
+                elif max_similarity is not None and float(max_similarity) >= 0.8:
+                    why_this_matters = (
+                        "recurring pattern similar to past failures, increasing CI noise."
+                    )
+                elif flake_rate >= 0.5:
+                    why_this_matters = (
+                        "fails repeatedly across runs, reducing build reliability."
+                    )
+                else:
+                    why_this_matters = (
+                        "repeated failure signal worth triaging before lower-risk noise."
+                    )
+
+                lines.append(f"- **{test_id}**")
+                lines.append(
+                    f"  - Risk: **{info.get('risk_tier', 'UNKNOWN')}** "
+                    f"({float(info.get('risk_score', 0.0)):.2f})"
+                )
+                lines.append(f"  - Seen in {seen_runs}/{total_runs} runs")
+                lines.append(f"  - Why this matters: {why_this_matters}")
+                if examples:
+                    preview = _compact_preview(examples[0].get("message"))
+                    if preview:
+                        lines.append(f"  - Preview: {preview}")
+                fp_preview = _compact_preview(fp, max_chars=140)
+                lines.append(f"  - Fingerprint: `{fp_preview}`")
+                lines.append("")
+
+        if has_flaky_tests:
+            lines.append("## ⚠️ Flaky Tests")
+            flaky_sorted = sorted(
+                flaky.items(),
+                key=lambda kv: (
+                    -float(kv[1].get("flake_rate", 0.0)),
+                    kv[0],
+                ),
+            )
+            for test_id, data in flaky_sorted[:10]:
+                statuses = ", ".join(data.get("statuses", []))
+                lines.append(f"- **{test_id}**")
+                lines.append(f"  - Flake rate: {float(data.get('flake_rate', 0.0)):.2f}")
+                lines.append(f"  - Confidence: {data.get('confidence', 'unknown')}")
+                lines.append(f"  - Statuses seen: `{statuses}`")
+                lines.append("")
+
+        if enable_semantic and (known_failures or novel_failures):
+            lines.append("## 🧠 Known vs Novel")
+            lines.append(f"- Known failures: {len(known_failures)}")
+            lines.append(f"- Novel failures: {len(novel_failures)}")
+            if novel_failures:
+                for fp in sorted(novel_failures)[:5]:
+                    lines.append(
+                        f"  - Novel fingerprint: `{_compact_preview(fp, max_chars=140)}`"
+                    )
             lines.append("")
 
-    # Semantic section ONLY when enabled
-    if enable_semantic:
-        lines.append("")
-        lines.append("## 🧠 Semantic failure groups (ML-assisted, experimental)")
-        lines.append("- Similarity threshold: **0.80**")
-        lines.append("")
+        if has_failure_groups:
+            lines.append("## 🔎 Failure Group Details")
+            sorted_groups = sorted(
+                failure_groups.items(),
+                key=lambda kv: (-kv[1]["count"], kv[0]),
+            )
+            for i, (fp, data) in enumerate(sorted_groups, start=1):
+                lines.append(f"### Group {i} — {data['count']} occurrences")
+                lines.append(f"- Fingerprint: `{fp[:180]}`")
+                lines.append("- Examples:")
+                for ex in data["examples"]:
+                    lines.append(
+                        f"  - `{ex['run_id']}` — **{ex['test_id']}** — {ex.get('message')}"
+                    )
+                lines.append("")
 
-        if not semantic_groups:
-            lines.append("✅ No semantic groups (no failures/errors to cluster).")
-        else:
+        # Semantic section ONLY when enabled and there is semantic data to show
+        if enable_semantic and semantic_groups:
+            lines.append("## 🧠 Semantic failure groups (ML-assisted, experimental)")
+            lines.append("- Similarity threshold: **0.80**")
+            lines.append("")
             for g in semantic_groups:
                 rep = g["representative"]
                 lines.append(
                     f"### Semantic Group {g['group_id']} — {g['size']} occurrences"
                 )
-                lines.append(f"- Representative: `{rep.get('message')}`")
+                rep_preview = _compact_preview(rep.get("message"), max_chars=180)
+                if rep_preview:
+                    lines.append(f"- Representative: `{rep_preview}`")
+                else:
+                    lines.append("- Representative: `no message available`")
                 lines.append("Members:")
                 for m in g["members"]:
+                    member_preview = _compact_preview(m.get("message"), max_chars=150)
                     lines.append(
-                        f"- `{m['run_id']}` — **{m['test_id']}** — {m.get('message')}"
+                        f"- `{m['run_id']}` — **{m['test_id']}** — {member_preview}"
                     )
                 lines.append("")
 
-    lines.append("")
-    lines.append("## 📊 Top flakiest tests")
-    if not top_flakes:
-        lines.append("✅ No flaky tests with enough history to score.")
-    else:
-        lines.append("| Test ID | Runs | Passes | Fails |")
-        lines.append("|---|---:|---:|---:|")
-        for test_id, runs_seen, pass_count, fail_count in top_flakes:
-            lines.append(f"| `{test_id}` | {runs_seen} | {pass_count} | {fail_count} |")
+        if top_flakes:
+            lines.append("## 📊 Top flakiest tests")
+            lines.append("")
+            lines.append("| Test ID | Runs | Passes | Fails |")
+            lines.append("|---|---:|---:|---:|")
+            for test_id, runs_seen, pass_count, fail_count in top_flakes:
+                lines.append(
+                    f"| `{test_id}` | {runs_seen} | {pass_count} | {fail_count} |"
+                )
+            lines.append("")
 
-    lines.append("")
     lines.append("## Runs included")
     for p in xml_paths:
         lines.append(f"- `{p}`")
@@ -421,7 +552,6 @@ def build_reports(
                 f"flake_rate={data['flake_rate']:.2f}, "
                 f"confidence={data['confidence']})"
             )
-
     # CLI summary: print top high-risk failures when semantic mode is enabled
     if enable_semantic:
         try:
