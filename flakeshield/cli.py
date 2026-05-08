@@ -11,6 +11,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 from flakeshield.config import load_config
@@ -32,6 +33,23 @@ def build_reports(
     enable_semantic: bool = False,
     min_runs: int = 4,
 ) -> None:
+    ansi_re = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+
+    def _compact_preview(text: str | None, max_chars: int = 160) -> str:
+        """Return markdown-friendly compact preview for noisy failure text."""
+        if not text:
+            return ""
+        cleaned = ansi_re.sub("", str(text))
+        cleaned = cleaned.replace("\r", " ").replace("\n", " ")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if len(cleaned) <= max_chars:
+            return cleaned
+        cut = cleaned[: max_chars - 1]
+        split_at = cut.rfind(" ")
+        if split_at > max_chars // 2:
+            cut = cut[:split_at]
+        return cut.rstrip(" .,;:") + "..."
+
     xml_paths = sorted(glob.glob(xml_glob))
 
     if len(xml_paths) < 2:
@@ -425,7 +443,12 @@ def build_reports(
                 )
                 lines.append(f"  - Seen in {seen_runs}/{total_runs} runs")
                 lines.append(f"  - Why this matters: {why_this_matters}")
-                lines.append(f"  - Fingerprint: `{fp[:120]}`")
+                if examples:
+                    preview = _compact_preview(examples[0].get("message"))
+                    if preview:
+                        lines.append(f"  - Preview: {preview}")
+                fp_preview = _compact_preview(fp, max_chars=140)
+                lines.append(f"  - Fingerprint: `{fp_preview}`")
                 lines.append("")
 
         if has_flaky_tests:
@@ -451,7 +474,9 @@ def build_reports(
             lines.append(f"- Novel failures: {len(novel_failures)}")
             if novel_failures:
                 for fp in sorted(novel_failures)[:5]:
-                    lines.append(f"  - Novel fingerprint: `{fp[:120]}`")
+                    lines.append(
+                        f"  - Novel fingerprint: `{_compact_preview(fp, max_chars=140)}`"
+                    )
             lines.append("")
 
         if has_failure_groups:
@@ -480,11 +505,16 @@ def build_reports(
                 lines.append(
                     f"### Semantic Group {g['group_id']} — {g['size']} occurrences"
                 )
-                lines.append(f"- Representative: `{rep.get('message')}`")
+                rep_preview = _compact_preview(rep.get("message"), max_chars=180)
+                if rep_preview:
+                    lines.append(f"- Representative: `{rep_preview}`")
+                else:
+                    lines.append("- Representative: `no message available`")
                 lines.append("Members:")
                 for m in g["members"]:
+                    member_preview = _compact_preview(m.get("message"), max_chars=150)
                     lines.append(
-                        f"- `{m['run_id']}` — **{m['test_id']}** — {m.get('message')}"
+                        f"- `{m['run_id']}` — **{m['test_id']}** — {member_preview}"
                     )
                 lines.append("")
 
