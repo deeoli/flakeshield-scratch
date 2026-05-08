@@ -72,6 +72,9 @@ def build_reports(
     fragmentation_delta = None
     novel_failure_matches = {}
     risk_analysis = {}
+    known_failures = []
+    novel_failures = []
+    risk_assessment = {}
 
     # NOTE: get_failure_groups returns dict-like in your implementation
     # If it returns a dict, len(...) gives number of groups.
