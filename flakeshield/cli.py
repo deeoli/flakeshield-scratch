@@ -329,38 +329,127 @@ def build_reports(
     lines.append(f"- Runs considered: **{len(run_ids)}**")
     lines.append("")
 
+    # Prioritized "Fix First" list from advisory risk output when available.
+    fix_first: list[tuple[str, dict, dict]] = []
+    if risk_assessment:
+        risk_sorted = sorted(
+            risk_assessment.items(),
+            key=lambda kv: (
+                -float(kv[1].get("risk_score", 0.0)),
+                kv[0],
+            ),
+        )
+        for fp, info in risk_sorted[:5]:
+            group = failure_groups.get(fp, {})
+            fix_first.append((fp, info, group))
+
+    lines.append("## 🔥 Fix First")
+    if not fix_first:
+        lines.append("✅ No prioritized failure groups yet.")
+    else:
+        for fp, info, group in fix_first:
+            examples = group.get("examples", []) if isinstance(group, dict) else []
+            test_id = examples[0].get("test_id") if examples else "unknown_test"
+            seen_runs = len(
+                {ex.get("run_id") for ex in examples if ex.get("run_id")}
+            )
+            total_runs = int(info.get("reasons", {}).get("runs_seen", len(run_ids)))
+            reasons = info.get("reasons", {}) if isinstance(info, dict) else {}
+            is_novel = bool(reasons.get("novel", False))
+            max_similarity = reasons.get("max_similarity")
+            flake_rate = float(reasons.get("flake_rate", 0.0))
+
+            if is_novel:
+                why_this_matters = (
+                    "new failure pattern that may indicate a regression."
+                )
+            elif max_similarity is not None and float(max_similarity) >= 0.8:
+                why_this_matters = (
+                    "recurring pattern similar to past failures, increasing CI noise."
+                )
+            elif flake_rate >= 0.5:
+                why_this_matters = (
+                    "fails repeatedly across runs, reducing build reliability."
+                )
+            else:
+                why_this_matters = (
+                    "repeated failure signal worth triaging before lower-risk noise."
+                )
+
+            lines.append(f"- **{test_id}**")
+            lines.append(
+                f"  - Risk: **{info.get('risk_tier', 'UNKNOWN')}** "
+                f"({float(info.get('risk_score', 0.0)):.2f})"
+            )
+            lines.append(f"  - Seen in {seen_runs}/{total_runs} runs")
+            lines.append(f"  - Why this matters: {why_this_matters}")
+            lines.append(f"  - Fingerprint: `{fp[:120]}`")
+            lines.append("")
+
+    lines.append("## ⚠️ Flaky Tests")
     if not flaky:
         lines.append("✅ No flaky tests detected.")
     else:
-        lines.append("## ⚠️ Flaky tests detected")
-        for test_id, data in sorted(flaky.items()):
-            lines.append(
-                f"- **{test_id}** → "
-                f"`{', '.join(data['statuses'])}` "
-                f"(runs={data['runs_seen']}, "
-                f"flake_rate={data['flake_rate']:.2f}, "
-                f"confidence={data['confidence']})"
-            )
+        flaky_sorted = sorted(
+            flaky.items(),
+            key=lambda kv: (
+                -float(kv[1].get("flake_rate", 0.0)),
+                kv[0],
+            ),
+        )
+        for test_id, data in flaky_sorted[:10]:
+            statuses = ", ".join(data.get("statuses", []))
+            lines.append(f"- **{test_id}**")
+            lines.append(f"  - Flake rate: {float(data.get('flake_rate', 0.0)):.2f}")
+            lines.append(f"  - Confidence: {data.get('confidence', 'unknown')}")
+            lines.append(f"  - Statuses seen: `{statuses}`")
+            lines.append("")
 
+    high_risk_count = 0
+    if risk_assessment:
+        high_risk_count = sum(
+            1
+            for info in risk_assessment.values()
+            if info.get("risk_tier") in {"HIGH", "CRITICAL"}
+        )
+
+    lines.append("## 📊 Summary")
+    lines.append(f"- {len(failure_groups)} failure groups")
+    flaky_count = len(flaky)
+    flaky_label = "flaky test" if flaky_count == 1 else "flaky tests"
+    lines.append(f"- {flaky_count} {flaky_label}")
+    if risk_assessment:
+        lines.append(f"- {high_risk_count} high-risk failures (HIGH/CRITICAL)")
+    else:
+        lines.append("- High-risk count unavailable (semantic mode disabled)")
     lines.append("")
-    lines.append("## 🔥 Failure groups")
+
+    lines.append("## 🧠 Known vs Novel")
+    if not enable_semantic:
+        lines.append("- Semantic mode disabled; known/novel classification unavailable.")
+    else:
+        lines.append(f"- Known failures: {len(known_failures)}")
+        lines.append(f"- Novel failures: {len(novel_failures)}")
+        if novel_failures:
+            for fp in sorted(novel_failures)[:5]:
+                lines.append(f"  - Novel fingerprint: `{fp[:120]}`")
+    lines.append("")
+
+    lines.append("## 🔎 Failure Group Details")
     if not failure_groups:
         lines.append("✅ No failures/errors to group.")
     else:
-        # Your failure_groups appears dict-like: {fingerprint: {count, examples}}
         sorted_groups = sorted(
             failure_groups.items(),
-            key=lambda kv: kv[1]["count"],
-            reverse=True,
+            key=lambda kv: (-kv[1]["count"], kv[0]),
         )
         for i, (fp, data) in enumerate(sorted_groups, start=1):
             lines.append(f"### Group {i} — {data['count']} occurrences")
-            lines.append("Fingerprint:")
-            lines.append(f"`{fp[:180]}`")
-            lines.append("Examples:")
+            lines.append(f"- Fingerprint: `{fp[:180]}`")
+            lines.append("- Examples:")
             for ex in data["examples"]:
                 lines.append(
-                    f"- `{ex['run_id']}` — **{ex['test_id']}** — {ex.get('message')}"
+                    f"  - `{ex['run_id']}` — **{ex['test_id']}** — {ex.get('message')}"
                 )
             lines.append("")
 
