@@ -29,6 +29,10 @@ inputs:
     description: "SQLite DB path."
     required: false
     default: "outputs/flakeshield.db"
+  enable_pr_comment:
+    description: "Post FlakeShield summary as GitHub PR comment."
+    required: false
+    default: "false"
 
 runs:
   using: docker

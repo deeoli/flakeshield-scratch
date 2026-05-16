@@ -250,6 +250,91 @@ Each branch accumulates independent history. Merging a feature branch to main st
 
 ---
 
+## PR Comment Integration
+
+FlakeShield can post a summary directly to pull requests, automatically updating the same comment on each run to prevent duplicate comments.
+
+### Setup
+
+Add a step to your workflow that posts the PR comment using `actions/github-script@v7`:
+
+```yaml
+- name: Post/Update PR comment
+  if: github.event_name == 'pull_request' && always()
+  uses: actions/github-script@v7
+  with:
+    script: |
+      const fs = require('fs');
+      const body = fs.readFileSync('outputs/pr_comment.md', 'utf8');
+
+      // Find existing FlakeShield comment by marker
+      const comments = await github.rest.issues.listComments({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: context.issue.number
+      });
+
+      const existing = comments.data.find(c =>
+        c.body.includes('<!-- FlakeShield')
+      );
+
+      if (existing) {
+        // Update existing comment (idempotent)
+        await github.rest.issues.updateComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          comment_id: existing.id,
+          body
+        });
+      } else {
+        // Create new comment
+        await github.rest.issues.createComment({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          issue_number: context.issue.number,
+          body
+        });
+      }
+```
+
+See the complete example at [examples/flakeshield-pr-comment-example.yml](examples/flakeshield-pr-comment-example.yml).
+
+### How It Works
+
+- **First run**: Creates a new PR comment with FlakeShield summary
+- **Subsequent runs**: Updates the same comment (no duplicate comments)
+- **Detection**: Uses an HTML comment marker (`<!-- FlakeShield -->`) appended to markdown
+- **Branch-aware**: Each PR gets its own independent comment lineage
+
+### What the Comment Shows
+
+The PR comment includes (up to 5 items each, sorted by severity):
+
+- **Flaky tests** — with flake rate and observation count
+- **High risk failures** — with risk tier (CRITICAL/HIGH/MEDIUM/LOW)
+- **Regressions** — new failures compared to branch history
+- **Novel failures** — new failure patterns not seen before
+- **Summary** — pass/fail counts and min_runs threshold status
+
+### Example Comment Output
+
+```markdown
+### Flaky tests
+- **test_auth_flow** (runs=5, rate=0.60)
+- **test_db_migration** (runs=4, rate=0.50)
+
+### High risk failures
+- **fingerprint_abc123** (CRITICAL)
+- **fingerprint_def456** (HIGH)
+
+### Regressions
+- fingerprint_ghi789 (since run_123)
+```
+
+---
+
+---
+
 ## Architecture
 
 

@@ -76,8 +76,8 @@ def render_pr_summary(report: Dict[str, Any]) -> str:
         lines.append("")
 
     if not lines:
-        return "No issues detected.\n"
+        return "No issues detected.\n\n<!-- FlakeShield -->\n"
 
     # join and ensure trailing newline
-    text = "\n".join(lines).rstrip() + "\n"
+    text = "\n".join(lines).rstrip() + "\n\n<!-- FlakeShield -->\n"
     return text

@@ -1,0 +1,113 @@
+name: FlakeShield with PR Comments
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  flakeshield:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Create output dir
+        run: mkdir -p outputs
+
+      - name: Restore FlakeShield DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            flakeshield-db-${{ github.ref }}-
+
+      - name: Run tests (produce JUnit XML)
+        run: |
+          pytest --junitxml=outputs/junit_run1_${{ github.run_id }}.xml || true
+          pytest --junitxml=outputs/junit_run2_${{ github.run_id }}.xml || true
+
+      - name: Run FlakeShield (deterministic)
+        run: |
+          flakeshield --reports "outputs/junit_run*.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db
+
+      - name: Run FlakeShield (semantic, non-blocking)
+        run: |
+          flakeshield --reports "outputs/junit_run*.xml" \
+                     --out outputs/flake_report \
+                     --db outputs/flakeshield.db \
+                     --enable-semantic
+        continue-on-error: true
+
+      - name: Generate PR summary
+        run: |
+          flakeshield pr-summary --json outputs/flake_report.json --out outputs/pr_comment.md
+
+      - name: Save FlakeShield DB cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: outputs/flakeshield.db
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
+
+      - name: Post/Update PR comment
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('outputs/pr_comment.md', 'utf8');
+
+            // Find existing FlakeShield comment by marker
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const existing = comments.data.find(c =>
+              c.body.includes('<!-- FlakeShield')
+            );
+
+            if (existing) {
+              // Update existing comment (idempotent)
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+              console.log(`Updated comment ${existing.id}`);
+            } else {
+              // Create new comment
+              const comment = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+              console.log(`Created comment ${comment.data.id}`);
+            }
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakeshield-reports
+          path: |
+            outputs/flake_report.json
+            outputs/flake_report.md
+            outputs/flakeshield.db
+            outputs/pr_comment.md
