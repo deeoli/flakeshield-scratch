@@ -1,0 +1,110 @@
+{
+  "runs_considered": [
+    "report_run4.xml",
+    "report_run5.xml",
+    "report_run6.xml"
+  ],
+  "run_count": 3,
+  "flaky_tests": {},
+  "failure_groups": {
+    "assert false\n +  where false = choice([true, false])\n +    where choice = random.choice": {
+      "count": 3,
+      "examples": [
+        {
+          "run_id": "report_run4.xml",
+          "test_id": "test_sample::test_flaky",
+          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
+        },
+        {
+          "run_id": "report_run5.xml",
+          "test_id": "test_sample::test_flaky",
+          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
+        },
+        {
+          "run_id": "report_run6.xml",
+          "test_id": "test_sample::test_flaky",
+          "message": "assert False\n +  where False = choice([True, False])\n +    where choice = random.choice"
+        }
+      ]
+    },
+    "assert 1 == 2": {
+      "count": 3,
+      "examples": [
+        {
+          "run_id": "report_run4.xml",
+          "test_id": "test_sample::test_always_fails",
+          "message": "assert 1 == 2"
+        },
+        {
+          "run_id": "report_run5.xml",
+          "test_id": "test_sample::test_always_fails",
+          "message": "assert 1 == 2"
+        },
+        {
+          "run_id": "report_run6.xml",
+          "test_id": "test_sample::test_always_fails",
+          "message": "assert 1 == 2"
+        }
+      ]
+    },
+    "assertionerror: user not found: id=123\nassert false": {
+      "count": 1,
+      "examples": [
+        {
+          "run_id": "report_run6.xml",
+          "test_id": "test_sample::test_same_bug_variant_1",
+          "message": "AssertionError: user not found: id=123\nassert False"
+        }
+      ]
+    },
+    "assertionerror: lookup failed: user not found (id=555)\nassert false": {
+      "count": 1,
+      "examples": [
+        {
+          "run_id": "report_run6.xml",
+          "test_id": "test_sample::test_same_bug_variant_3",
+          "message": "AssertionError: lookup failed: user not found (id=555)\nassert False"
+        }
+      ]
+    },
+    "assertionerror: error user missing for id=999\nassert false": {
+      "count": 1,
+      "examples": [
+        {
+          "run_id": "report_run6.xml",
+          "test_id": "test_sample::test_same_bug_variant_2",
+          "message": "AssertionError: ERROR user missing for id=999\nassert False"
+        }
+      ]
+    }
+  },
+  "semantic_failure_groups": [],
+  "novel_failures": [],
+  "known_failures": [],
+  "novel_failure_matches": {},
+  "risk_analysis": {},
+  "risk_assessment": {},
+  "metrics": {
+    "semantic_enabled": false,
+    "fingerprint_group_count": 5,
+    "semantic_group_count": null,
+    "fragmentation_delta": null
+  },
+  "regressions": [
+    {
+      "fingerprint": "assertionerror: error user missing for id=999\nassert false",
+      "since_run": "report_run5.xml",
+      "current_run": "report_run6.xml"
+    },
+    {
+      "fingerprint": "assertionerror: lookup failed: user not found (id=555)\nassert false",
+      "since_run": "report_run5.xml",
+      "current_run": "report_run6.xml"
+    },
+    {
+      "fingerprint": "assertionerror: user not found: id=123\nassert false",
+      "since_run": "report_run5.xml",
+      "current_run": "report_run6.xml"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "runs_considered": [
+    "junit_run1.xml",
+    "junit_run2.xml"
+  ],
+  "run_count": 2,
+  "flaky_tests": {},
+  "failure_groups": {},
+  "semantic_failure_groups": [],
+  "novel_failures": [],
+  "known_failures": [],
+  "novel_failure_matches": {},
+  "risk_analysis": {},
+  "risk_assessment": {},
+  "metrics": {
+    "semantic_enabled": false,
+    "fingerprint_group_count": 0,
+    "semantic_group_count": null,
+    "fragmentation_delta": null
+  },
+  "regressions": []
+}

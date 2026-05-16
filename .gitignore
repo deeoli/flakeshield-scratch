@@ -28,6 +28,11 @@ tools/simulation/out/*
 *.json
 *.md
 
+# Allow audit examples
+!audit/**/*.json
+!audit/**/*.md
+!audit/**/*.xml
+
 # OS / editor
 .DS_Store
 .vscode/

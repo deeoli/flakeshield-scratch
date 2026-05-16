@@ -17,7 +17,7 @@ def render_pr_summary(report: Dict[str, Any]) -> str:
     Sections included (each up to five entries):
 
     * Flaky tests
-    * High risk failures (if ``risk_assessment`` present)
+    * Fix First failures (semantic risk or deterministic regressions)
     * Regressions (if ``regressions`` list present)
     * Novel failures (if ``novel_failures`` list present)
 
@@ -45,17 +45,41 @@ def render_pr_summary(report: Dict[str, Any]) -> str:
                 lines.append(f"- **{test}**")
         lines.append("")
 
-    # --- high risk failures --------------------------------------------------
+    # --- fix-first failures -------------------------------------------------
     risk = report.get("risk_assessment") or {}
-    if risk:
-        lines.append("### High risk failures")
-        # present tier next to fp; deterministic sort by fp for stability
-        for fp, tier in sorted(risk.items())[:5]:
-            lines.append(f"- **{fp}** ({tier})")
+    regs = report.get("regressions") or []
+    if risk or regs:
+        lines.append("### Fix First")
+        if risk:
+            items = []
+            for fp, info in risk.items():
+                if isinstance(info, dict):
+                    tier = info.get("risk_tier", "UNKNOWN")
+                    score = info.get("risk_score")
+                else:
+                    tier = str(info)
+                    score = None
+                items.append((fp, tier, score))
+
+            items.sort(
+                key=lambda item: ((-item[2]) if item[2] is not None else 0.0, item[0])
+            )
+            for fp, tier, score in items[:5]:
+                if score is not None:
+                    lines.append(f"- **{fp}** — {tier} ({score:.2f})")
+                else:
+                    lines.append(f"- **{fp}** — {tier}")
+        else:
+            for r in regs[:5]:
+                fp = r.get("fingerprint")
+                since = r.get("since_run")
+                if fp and since:
+                    lines.append(f"- {fp} (regression since {since})")
+                elif fp:
+                    lines.append(f"- {fp}")
         lines.append("")
 
     # --- regressions ---------------------------------------------------------
-    regs = report.get("regressions") or []
     if regs:
         lines.append("### Regressions")
         for r in regs[:5]:

@@ -19,6 +19,7 @@ from flakeshield.db_queries import get_failure_groups, get_flaky_tests
 from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.known_novel import classify_known_novel
 from flakeshield.parse_junit import parse_pytest_junit
+from flakeshield.pr_summary import render_pr_summary
 from flakeshield.risk_scoring import compute_risk_analysis
 from flakeshield.policy import classify_risk_tier
 from flakeshield.scoring import top_flakiest
@@ -35,11 +36,12 @@ def build_reports(
 ) -> None:
     ansi_re = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 
-    def _compact_preview(text: str | None, max_chars: int = 160) -> str:
+    def _compact_preview(text: str | None, max_chars: int = 120) -> str:
         """Return markdown-friendly compact preview for noisy failure text."""
         if not text:
             return ""
         cleaned = ansi_re.sub("", str(text))
+        cleaned = re.sub(r"<[^>]*>", " ", cleaned)
         cleaned = cleaned.replace("\r", " ").replace("\n", " ")
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         if len(cleaned) <= max_chars:
@@ -49,6 +51,35 @@ def build_reports(
         if split_at > max_chars // 2:
             cut = cut[:split_at]
         return cut.rstrip(" .,;:") + "..."
+
+    def _truncate_failure_message(
+        text: str | None, max_lines: int = 3, max_chars_per_line: int = 120
+    ) -> str:
+        """Aggressively truncate error messages, removing HTML and excessive detail."""
+        if not text:
+            return ""
+        # Remove ANSI codes
+        cleaned = ansi_re.sub("", str(text))
+        # Remove HTML-like tags
+        cleaned = re.sub(r"<[^>]*>", " ", cleaned)
+        # Collapse whitespace and normalize
+        cleaned = cleaned.replace("\r", " ").replace("\n", " | ")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        # Split into lines if multiple logical sections
+        lines = cleaned.split(" | ")[:max_lines]
+
+        # Truncate each line
+        truncated_lines = []
+        for line in lines:
+            if len(line) > max_chars_per_line:
+                line = line[: max_chars_per_line - 1].rstrip() + "…"
+            truncated_lines.append(line)
+
+        result = " | ".join(truncated_lines)
+        if len(result) > 240:
+            result = result[:240].rstrip() + "…"
+        return result
 
     xml_paths = sorted(glob.glob(xml_glob))
 
@@ -343,6 +374,34 @@ def build_reports(
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
+    # Generate PR comment markdown (concise, GitHub-friendly)
+    pr_comment_text = render_pr_summary(report)
+    pr_comment_path = (
+        f"{out_prefix.rsplit('.', 1)[0]}_pr_comment.md"
+        if "." in out_prefix
+        else f"{out_prefix}_pr_comment.md"
+    )
+    # Simplify: just use pr_comment.md if out_prefix is a directory path
+    if "/" in out_prefix or "\\" in out_prefix:
+        # out_prefix is like "outputs/flake_report"
+        dir_path = os.path.dirname(out_prefix) or "."
+        base_name = os.path.basename(out_prefix)
+        pr_comment_path = os.path.join(dir_path, f"{base_name}_pr_comment.md")
+    else:
+        # out_prefix is just "flake_report"
+        pr_comment_path = f"{out_prefix}_pr_comment.md"
+
+    with open(pr_comment_path, "w", encoding="utf-8") as f:
+        f.write(pr_comment_text)
+
+    legacy_pr_comment_path = os.path.join(
+        os.path.dirname(pr_comment_path), "pr_comment.md"
+    )
+    if os.path.basename(pr_comment_path) != "pr_comment.md":
+        with open(legacy_pr_comment_path, "w", encoding="utf-8") as f:
+            f.write(pr_comment_text)
+        print(f"Wrote {legacy_pr_comment_path}")
+
     # Markdown report
     lines: list[str] = []
     lines.append("# FlakeShield Report")
@@ -380,7 +439,9 @@ def build_reports(
     if healthy_run:
         lines.append("## ✅ CI Looks Healthy")
         lines.append("")
-        lines.append("No flaky tests or high-risk failures were detected across recent runs.")
+        lines.append(
+            "No flaky tests or high-risk failures were detected across recent runs."
+        )
         lines.append("")
         lines.append("No immediate CI triage appears necessary.")
         lines.append("")
@@ -424,17 +485,13 @@ def build_reports(
                         "new failure pattern that may indicate a regression."
                     )
                 elif max_similarity is not None and float(max_similarity) >= 0.8:
-                    why_this_matters = (
-                        "recurring pattern similar to past failures, increasing CI noise."
-                    )
+                    why_this_matters = "recurring pattern similar to past failures, increasing CI noise."
                 elif flake_rate >= 0.5:
                     why_this_matters = (
                         "fails repeatedly across runs, reducing build reliability."
                     )
                 else:
-                    why_this_matters = (
-                        "repeated failure signal worth triaging before lower-risk noise."
-                    )
+                    why_this_matters = "repeated failure signal worth triaging before lower-risk noise."
 
                 lines.append(f"- **{test_id}**")
                 lines.append(
@@ -463,7 +520,9 @@ def build_reports(
             for test_id, data in flaky_sorted[:10]:
                 statuses = ", ".join(data.get("statuses", []))
                 lines.append(f"- **{test_id}**")
-                lines.append(f"  - Flake rate: {float(data.get('flake_rate', 0.0)):.2f}")
+                lines.append(
+                    f"  - Flake rate: {float(data.get('flake_rate', 0.0)):.2f}"
+                )
                 lines.append(f"  - Confidence: {data.get('confidence', 'unknown')}")
                 lines.append(f"  - Statuses seen: `{statuses}`")
                 lines.append("")
@@ -489,10 +548,14 @@ def build_reports(
                 lines.append(f"### Group {i} — {data['count']} occurrences")
                 lines.append(f"- Fingerprint: `{fp[:180]}`")
                 lines.append("- Examples:")
-                for ex in data["examples"]:
+                examples = data.get("examples", []) if isinstance(data, dict) else []
+                for ex in examples[:3]:
+                    truncated_msg = _truncate_failure_message(ex.get("message"))
                     lines.append(
-                        f"  - `{ex['run_id']}` — **{ex['test_id']}** — {ex.get('message')}"
+                        f"  - `{ex['run_id']}` — **{ex['test_id']}** — {truncated_msg}"
                     )
+                if len(examples) > 3:
+                    lines.append(f"  - ... plus {len(examples) - 3} more occurrences")
                 lines.append("")
 
         # Semantic section ONLY when enabled and there is semantic data to show
@@ -540,6 +603,7 @@ def build_reports(
     # Console summary
     print(f"Wrote {json_path}")
     print(f"Wrote {md_path}")
+    print(f"Wrote {pr_comment_path}")
 
     if not flaky:
         print("No flaky tests detected (no status changes across runs).")

@@ -24,7 +24,10 @@ def test_includes_flaky_and_regressions_when_present(tmp_path):
             "test.foo": {"flake_rate": 0.33, "runs_seen": 3},
             "test.bar": {"flake_rate": 0.50, "runs_seen": 2},
         },
-        "risk_assessment": {"fp1": "HIGH", "fp2": "LOW"},
+        "risk_assessment": {
+            "fp1": {"risk_tier": "HIGH", "risk_score": 0.85},
+            "fp2": {"risk_tier": "LOW", "risk_score": 0.10},
+        },
         "regressions": [
             {"fingerprint": "fpA", "since_run": "r1", "current_run": "r2"},
             {"fingerprint": "fpB", "since_run": "r1", "current_run": "r2"},
@@ -35,9 +38,9 @@ def test_includes_flaky_and_regressions_when_present(tmp_path):
     # flaky tests section
     assert "Flaky tests" in md
     assert "test.bar" in md and "test.foo" in md
-    # risk section should include only HIGH? our implementation prints all
-    assert "High risk failures" in md
-    assert "fp1" in md
+    # fix-first section
+    assert "Fix First" in md
+    assert "fp1" in md and "HIGH" in md
     # regressions
     assert "Regressions" in md and "fpA" in md
     # novel
@@ -70,3 +73,14 @@ def test_cli_pr_summary(tmp_path):
         sys.argv = old_argv
     assert out_path.exists()
     assert "Flaky tests" in out_path.read_text()
+
+
+def test_fix_first_fallback_to_regressions():
+    report = {
+        "flaky_tests": {},
+        "failure_groups": {},
+        "regressions": [{"fingerprint": "fpA", "since_run": "r1"}],
+    }
+    md = render_pr_summary(report)
+    assert "Fix First" in md
+    assert "regression since r1" in md
