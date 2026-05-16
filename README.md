@@ -1,392 +1,215 @@
----
+﻿# FlakeShield
 
-# FlakeShield
+**Fast CI failure triage for teams that want signal, not noise.**
 
-**Deterministic CI signal reduction with optional semantic intelligence.**
+FlakeShield analyzes JUnit test results, labels flakiness, groups repeated failures, and surfaces the most important issues first. It is designed for developers who need a lightweight, reliable way to understand CI failures without adding dashboards or SaaS.
 
-FlakeShield analyzes JUnit test results and turns CI failure noise into prioritized, actionable insight — without blocking your pipeline.
-
----
-
-## What It Solves
-
-Modern CI pipelines suffer from:
-
-* Flaky tests masking real regressions
-* Repeated “known” failures wasting triage time
-* Poor prioritization of failures
-* Fragmented error grouping
-
-FlakeShield reduces noise and surfaces:
-
-* Flaky tests (with confidence levels)
-* Deterministic failure groups
-* Known vs novel failures
-* Top-k similar historical failures (semantic mode)
-* Advisory risk scoring
-* CLI high-risk summary
-
----
-
-## Quick Start
-
-### Installation
+## 1. Install in 2 minutes
 
 ```bash
+cd flakeshield-scratch
+python -m pip install --upgrade pip
 pip install -e .
 ```
 
----
-
-## Deterministic Mode (Default)
-
-Analyze test failures using fingerprinting only (no ML, no network):
+If you want only the CLI and dependency isolation, install with:
 
 ```bash
-flakeshield --reports "examples/report*.xml" --out outputs/flake_report --db outputs/flakeshield.db
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -e .
 ```
 
-This will:
+## 2. What it does
 
-1. Parse JUnit XML files
-2. Persist results to SQLite
-3. Generate:
+FlakeShield helps teams by:
 
-   * `outputs/flake_report.json` (machine-readable)
-   * `outputs/flake_report.md` (human-readable)
+- detecting flaky tests across repeated JUnit runs
+- highlighting deterministic failures separately from noise
+- storing history in SQLite so results improve over time
+- optionally using semantic assistance to flag emerging risk
+- generating both machine-readable and human-readable output
 
-Deterministic mode is always authoritative.
+## 3. Minimal local CLI example
 
----
-
-## Optional: Semantic Mode (ML-Assisted, Non-Blocking)
-
-Enable semantic grouping, similarity lookup, and advisory risk scoring:
+Run FlakeShield against JUnit XML files:
 
 ```bash
-flakeshield --reports "examples/report*.xml" --out outputs/flake_report --db outputs/flakeshield.db --enable-semantic
+flakeshield --reports "examples/demo-repo/outputs/junit_run*.xml" \
+           --out outputs/flake_report \
+           --db outputs/flakeshield.db
 ```
 
-First run may download an embedding model (a few seconds).
-Subsequent runs use cached model.
+This writes:
 
-The semantic layer is:
+- `outputs/flake_report.json` — structured findings for scripts
+- `outputs/flake_report.md` — quick human report
+- `outputs/flakeshield.db` — historical test data
 
-* **Optional** — deterministic mode works without it
-* **Advisory-only** — never authoritative
-* **Non-blocking** — failures degrade gracefully
-* **CI-safe** — semantic errors do not fail builds
+## 4. What output looks like
 
-When enabled, CLI also prints:
+A typical human-readable report includes:
 
+```markdown
+### Flaky tests
+- **tests/test_demo.py::test_flaky** (runs=2, rate=0.50)
+
+### High risk failures
+- **fingerprint:a1b2c3** (CRITICAL)
+
+### Regressions
+- fingerprint:d4e5f6 (since run_123)
+
+### Novel failures
+- fingerprint:abc123
 ```
-High Risk Failures:
-1. <fingerprint> — 0.83
-2. <fingerprint> — 0.71
-```
 
----
+The report is intentionally short and review-friendly.
 
-## Commands
+## 5. Optional semantic mode
+
+Semantic mode is an advisory layer that runs only when you opt in.
 
 ```bash
-# Show help
-flakeshield --help
-
-# Deterministic run (no network/model required)
-flakeshield --reports "examples/report*.xml" --out outputs/flake_report
-
-# Semantic-enabled run
-flakeshield --reports "examples/report*.xml" --out outputs/flake_report --enable-semantic
-
-# Custom database path
-flakeshield --reports "examples/report*.xml" --out outputs/flake_report --db /tmp/custom.db --enable-semantic
-
-# Pretty-print JSON report
-cat outputs/flake_report.json | python -m json.tool
+flakeshield --reports "examples/demo-repo/outputs/junit_run*.xml" \
+           --out outputs/flake_report \
+           --db outputs/flakeshield.db \
+           --enable-semantic
 ```
 
----
+Semantic mode adds:
 
-## GitHub Action (Validated)
+- known vs novel failure detection
+- top-k similarity suggestions
+- advisory risk scores
+- non-blocking ML assistance
 
-Use FlakeShield as a drop-in CI step with the Docker-based GitHub Action:
+It is **optional** and **safely degrades** if models or network are unavailable.
+
+## 6. Why DB persistence matters
+
+FlakeShield stores results in `outputs/flakeshield.db` so each workflow run learns from prior history.
+
+That means:
+
+- flaky tests are detected only after repeated runs
+- risk scoring improves as the database grows
+- failures are grouped across time, not just per run
+
+### GitHub Actions cache pattern
+
+Use a cache restore/save step around FlakeShield. Keep the cache scoped to the branch so history is preserved across runs:
 
 ```yaml
-name: FlakeShield
-
-on:
-  pull_request:
-  workflow_dispatch:
-
-jobs:
-  flakecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run tests
-        run: |
-          mkdir -p outputs
-          pytest --junitxml=outputs/junit.xml
-      - uses: ./            # or flakeshield/action@v0.4.0
-        with:
-          reports: "outputs/junit.xml"
-          enable_semantic: "true"        # optional
-          warn_on_high: "true"           # optional
-          fail_on_critical: "true"       # optional
-          max-risk-threshold: "0.80"     # optional
-```
-
-**Behavior:**
-- By default, FlakeShield is **non-blocking** and provides advisory output
-- When policy flags are enabled (`warn_on_high`, `fail_on_critical`, `max-risk-threshold`), it can fail CI
-- Generates artifacts: `outputs/flake_report.json`, `outputs/flake_report.md`, `outputs/flakeshield.db`
-- On PRs, automatically posts/updates a comment with the report summary
-
-**Inputs:**
-- `reports` – glob for XMLs (required)
-- `enable_semantic` – enable semantic mode (default: "false")
-- `warn_on_high` – print warnings for HIGH/CRITICAL risks (default: "false")
-- `fail_on_critical` – exit nonzero on CRITICAL risks (default: "false")
-- `max-risk-threshold` – exit nonzero if any risk_score ≥ threshold (default: "")
-- `out_prefix` – output path prefix (default: "outputs/flake_report")
-- `db_path` – SQLite database path (default: "outputs/flakeshield.db")
-
----
-
-## GitHub Action Example
-
-See the complete example workflow at [examples/flakeshield-action-example.yml](examples/flakeshield-action-example.yml).
-
-Quick start:
-
-```yaml
-- name: Run FlakeShield
-  uses: deeoli/flakeshield-scratch@v0.4.0
+- name: Restore FlakeShield DB cache
+  uses: actions/cache@v4
   with:
-    reports: "outputs/junit.xml"
-    enable_semantic: "true"
+    path: outputs/flakeshield.db
+    key: flakeshield-db-${{ github.ref }}
+    restore-keys: |
+      flakeshield-db-${{ github.ref }}-
+
+# Run FlakeShield here
+
+- name: Save FlakeShield DB cache
+  if: always()
+  uses: actions/cache@v4
+  with:
+    path: outputs/flakeshield.db
+    key: flakeshield-db-${{ github.ref }}
 ```
 
----
+## 7. Canonical GitHub workflow
 
-## GitHub Actions: Database Persistence & Historical Detection
+See the recommended example at `examples/canonical-workflow.yml`.
 
-To accumulate flake history across workflow runs (required for `min_runs=4` detection threshold), configure cache and unique XML filenames:
+It shows the clean flow:
 
-### 1. Cache the Database
+1. restore DB cache
+2. run tests twice with unique JUnit filenames
+3. run FlakeShield
+4. generate a PR summary markdown
+5. post or update a PR comment
+6. upload artifacts
 
-Add cache restore before FlakeShield runs, save after:
+## 8. Optional PR comments
+
+FlakeShield can generate PR-ready markdown. The workflow example includes an idempotent commenter that updates the same comment on each run using a hidden marker.
+
+### PR comment step
 
 ```yaml
-jobs:
-  flakeshield:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run tests
-        run: |
-          mkdir -p outputs
-          pytest --junitxml=outputs/junit_run1_${{ github.run_id }}.xml || true
-          pytest --junitxml=outputs/junit_run2_${{ github.run_id }}.xml || true
-
-      - name: Restore FlakeShield DB cache
-        uses: actions/cache@v4
-        with:
-          path: outputs/flakeshield.db
-          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
-          restore-keys: |
-            flakeshield-db-${{ github.ref }}-
-
-      - name: Run FlakeShield
-        uses: deeoli/flakeshield-scratch@v0.4.0
-        with:
-          reports: "outputs/junit_run*.xml"
-          enable_semantic: "true"
-
-      - name: Save FlakeShield DB cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: outputs/flakeshield.db
-          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
-```
-
-### 2. ⚠️ CRITICAL: Unique XML Filenames Per Run
-
-**Each workflow run must generate unique XML filenames**, otherwise FlakeShield's database deduplication prevents history accumulation.
-
-**❌ WRONG** (DB won't grow):
-```yaml
-pytest --junitxml=outputs/junit.xml
-```
-
-**✅ CORRECT** (DB accumulates):
-```yaml
-pytest --junitxml=outputs/junit_${{ github.run_id }}.xml
-```
-
-**Why:** `run_id` is derived from XML basename (e.g., `"junit_12345.xml"`). The database uses `UNIQUE(run_id, test_id)` to prevent duplicate test results within the same run. Static filenames create identical run_ids across runs, silently rejecting new history.
-
-### 3. Verify Accumulation
-
-Check DB growth between runs:
-
-```bash
-sqlite3 outputs/flakeshield.db "SELECT COUNT(*) FROM test_results;"
-```
-
-Each run should increase the count. First run: N rows. Second run: N + M rows (where M = new test observations).
-
-### Branch-Aware Caching
-
-The cache key strategy enables per-branch history:
-
-- **main** → `flakeshield-db-refs/heads/main-*`
-- **feature/foo** → `flakeshield-db-refs/heads/feature/foo-*`
-- **PR** → `flakeshield-db-pull/123/merge-*`
-
-Each branch accumulates independent history. Merging a feature branch to main starts with main's history, not feature's.
-
----
-
-## PR Comment Integration
-
-FlakeShield can post a summary directly to pull requests, automatically updating the same comment on each run to prevent duplicate comments.
-
-### Setup
-
-Add a step to your workflow that posts the PR comment using `actions/github-script@v7`:
-
-```yaml
-- name: Post/Update PR comment
-  if: github.event_name == 'pull_request' && always()
+- name: Post or update PR comment
+  if: github.event_name == 'pull_request'
   uses: actions/github-script@v7
   with:
     script: |
       const fs = require('fs');
       const body = fs.readFileSync('outputs/pr_comment.md', 'utf8');
-
-      // Find existing FlakeShield comment by marker
       const comments = await github.rest.issues.listComments({
         owner: context.repo.owner,
         repo: context.repo.repo,
-        issue_number: context.issue.number
+        issue_number: context.issue.number,
       });
-
       const existing = comments.data.find(c =>
         c.body.includes('<!-- FlakeShield')
       );
-
       if (existing) {
-        // Update existing comment (idempotent)
         await github.rest.issues.updateComment({
           owner: context.repo.owner,
           repo: context.repo.repo,
           comment_id: existing.id,
-          body
+          body,
         });
       } else {
-        // Create new comment
         await github.rest.issues.createComment({
           owner: context.repo.owner,
           repo: context.repo.repo,
           issue_number: context.issue.number,
-          body
+          body,
         });
       }
 ```
 
-See the complete example at [examples/flakeshield-pr-comment-example.yml](examples/flakeshield-pr-comment-example.yml).
+## 9. Example repo ready to run
 
-### How It Works
-
-- **First run**: Creates a new PR comment with FlakeShield summary
-- **Subsequent runs**: Updates the same comment (no duplicate comments)
-- **Detection**: Uses an HTML comment marker (`<!-- FlakeShield -->`) appended to markdown
-- **Branch-aware**: Each PR gets its own independent comment lineage
-
-### What the Comment Shows
-
-The PR comment includes (up to 5 items each, sorted by severity):
-
-- **Flaky tests** — with flake rate and observation count
-- **High risk failures** — with risk tier (CRITICAL/HIGH/MEDIUM/LOW)
-- **Regressions** — new failures compared to branch history
-- **Novel failures** — new failure patterns not seen before
-- **Summary** — pass/fail counts and min_runs threshold status
-
-### Example Comment Output
-
-```markdown
-### Flaky tests
-- **test_auth_flow** (runs=5, rate=0.60)
-- **test_db_migration** (runs=4, rate=0.50)
-
-### High risk failures
-- **fingerprint_abc123** (CRITICAL)
-- **fingerprint_def456** (HIGH)
-
-### Regressions
-- fingerprint_ghi789 (since run_123)
-```
-
----
-
----
-
-## Architecture
-
-
-FlakeShield follows a strict layered design:
-
-### Deterministic Core (Authoritative)
-
-* Fingerprint normalization
-* Failure grouping
-* Flakiness detection
-* Confidence scoring
-* DB-backed analytics
-
-### Semantic Layer (Advisory)
-
-* Embedding persistence
-* Known vs novel detection
-* Top-k similarity matching
-* Risk scoring
-* CLI high-risk summary
-
-The deterministic layer is always the source of truth.
-
----
-
-## Development
-
-Run tests:
+Use `examples/demo-repo/` for a tiny runnable suite with a flaky test, a deterministic failure, and sample generated outputs.
 
 ```bash
+cd examples/demo-repo
+python -m pip install -r requirements.txt
+mkdir -p outputs
+pytest --junitxml=outputs/junit_run1_1.xml || true
+DEMO_FLAKY=1 pytest --junitxml=outputs/junit_run2_1.xml || true
+```
+
+Then run FlakeShield:
+
+```bash
+cd ../..
+flakeshield --reports "examples/demo-repo/outputs/junit_run*.xml" \
+           --out examples/demo-repo/outputs/flake_report \
+           --db examples/demo-repo/outputs/flakeshield.db \
+           --enable-semantic
+```
+
+## 10. Useful commands
+
+```bash
+flakeshield --help
+cat outputs/flake_report.json | python -m json.tool
 pytest -q
 ```
 
-Run with coverage:
+## 11. Notes
 
-```bash
-pytest tests/ --cov=flakeshield --cov-report=term-missing
-```
-
-All semantic features are fully test-covered and CI-safe.
-
----
-
-## Version
-
-Current version: **0.4.0**
+- FlakeShield is intentionally focused on developer UX, not dashboards.
+- The deterministic engine is the source of truth.
+- Semantic mode is advisory and safe for CI.
+- The `examples/canonical-workflow.yml` file is the recommended integration pattern.
 
 ---
 
 ## License
 
 MIT
-
----
-

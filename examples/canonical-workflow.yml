@@ -9,8 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,14 +23,13 @@ jobs:
           pip install -e .
 
       - name: Prepare outputs
-        run: |
-          mkdir -p outputs
+        run: mkdir -p outputs
 
       - name: Restore FlakeShield DB cache
         uses: actions/cache@v4
         with:
           path: outputs/flakeshield.db
-          key: flakeshield-db-${{ github.ref }}
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
             flakeshield-db-${{ github.ref }}-
 
@@ -40,19 +38,13 @@ jobs:
           pytest --junitxml=outputs/junit_run1_${{ github.run_id }}.xml || true
           pytest --junitxml=outputs/junit_run2_${{ github.run_id }}.xml || true
 
-      - name: Run FlakeShield (deterministic)
-        run: |
-          flakeshield --reports "outputs/junit_run*.xml" \
-                     --out outputs/flake_report \
-                     --db outputs/flakeshield.db
-
-      - name: Run FlakeShield (semantic, non-blocking)
-        run: |
-          flakeshield --reports "outputs/junit_run*.xml" \
-                     --out outputs/flake_report \
-                     --db outputs/flakeshield.db \
-                     --enable-semantic
-        continue-on-error: true
+      - name: Run FlakeShield
+        uses: deeoli/flakeshield-action@v0.4.0
+        with:
+          reports: "outputs/junit_run*.xml"
+          enable_semantic: "true"
+          warn_on_high: "true"
+          fail_on_critical: "false"
 
       - name: Generate PR summary
         if: github.event_name == 'pull_request'
@@ -95,7 +87,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: outputs/flakeshield.db
-          key: flakeshield-db-${{ github.ref }}
+          key: flakeshield-db-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload artifacts
         if: always()
@@ -107,4 +99,3 @@ jobs:
             outputs/flake_report.md
             outputs/flakeshield.db
             outputs/pr_comment.md
-          if-no-files-found: warn
