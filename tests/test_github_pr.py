@@ -76,7 +76,9 @@ class TestUpdateOrCreateComment:
         mock_requests.get.return_value = find_response
         mock_requests.post.return_value = create_response
 
-        result = update_or_create_comment("token", "owner", "repo", 42, "# Report\n\n<!-- FlakeShield -->")
+        result = update_or_create_comment(
+            "token", "owner", "repo", 42, "# Report\n\n<!-- FlakeShield -->"
+        )
 
         assert result == 5
         mock_requests.post.assert_called_once()
@@ -98,7 +100,9 @@ class TestUpdateOrCreateComment:
         mock_requests.get.return_value = find_response
         mock_requests.patch.return_value = update_response
 
-        result = update_or_create_comment("token", "owner", "repo", 42, "# New Report\n\n<!-- FlakeShield -->")
+        result = update_or_create_comment(
+            "token", "owner", "repo", 42, "# New Report\n\n<!-- FlakeShield -->"
+        )
 
         assert result == 3
         mock_requests.patch.assert_called_once()
