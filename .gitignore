@@ -33,6 +33,11 @@ tools/simulation/out/*
 !audit/**/*.md
 !audit/**/*.xml
 
+audit/bohboh-api/
+audit/bohboh-fe-v2/
+audit/ux-polish/
+audit/manifest.json
+
 # OS / editor
 .DS_Store
 .vscode/
