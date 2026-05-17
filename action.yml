@@ -38,8 +38,6 @@ runs:
   using: docker
   image: Dockerfile
   args:
-    - "--build-arg"
-    - "INSTALL_SEMANTIC=${{ inputs.enable_semantic }}"
     - "${{ inputs.reports }}"
     - "${{ inputs.out_prefix }}"
     - "${{ inputs.db_path }}"
