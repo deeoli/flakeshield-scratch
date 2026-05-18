@@ -1,104 +1,107 @@
 ﻿# FlakeShield
 
-**Fast CI failure triage for teams that want signal, not noise.**
+**Detect flaky tests, reduce CI noise, and know what to fix first.**
 
-FlakeShield analyzes JUnit test results, labels flakiness, groups repeated failures, and surfaces the most important issues first. It is designed for developers who need a lightweight, reliable way to understand CI failures without adding dashboards or SaaS.
+FlakeShield turns repeated JUnit runs into a concise CI triage signal:
 
-## 1. Install in 2 minutes
+- groups repeated failures into stable fingerprints
+- highlights flaky tests separately from deterministic failures
+- generates a compact GitHub-friendly summary
+- prioritizes fixable issues, not noisy traces
 
-```bash
-cd flakeshield-scratch
-python -m pip install --upgrade pip
-pip install -e .
+FlakeShield is built for teams that want faster CI review without dashboards or SaaS.
+
+## Fast install
+
+Use the official GitHub Action for `v0.5.1`:
+
+```yaml
+uses: deeoli/flakeshield-scratch@v0.5.1
+with:
+  reports: "outputs/junit_run*.xml"
+  out_prefix: outputs/flake_report
+  db_path: outputs/flakeshield.db
+  enable_semantic: "true"
+  warn_on_high: "true"
+  fail_on_critical: "false"
 ```
 
-If you want only the CLI and dependency isolation, install with:
+This is the recommended integration path for external developer adoption.
 
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-pip install -e .
+## Quickstart
+
+A minimal GitHub Actions job looks like this:
+
+```yaml
+name: FlakeShield CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  flakeshield:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run tests to produce JUnit XML
+        run: |
+          pytest --junitxml=outputs/junit_run1.xml || true
+          pytest --junitxml=outputs/junit_run2.xml || true
+
+      - name: Run FlakeShield
+        uses: deeoli/flakeshield-scratch@v0.5.1
+        with:
+          reports: "outputs/junit_run*.xml"
+          out_prefix: outputs/flake_report
+          db_path: outputs/flakeshield.db
+          enable_semantic: "true"
+          warn_on_high: "true"
+          fail_on_critical: "false"
 ```
 
-## 2. What it does
+## Why FlakeShield
 
-FlakeShield helps teams by:
+FlakeShield helps teams move faster by converting noisy CI output into action:
 
-- detecting flaky tests across repeated JUnit runs
-- highlighting deterministic failures separately from noise
-- storing history in SQLite so results improve over time
-- optionally using semantic assistance to flag emerging risk
-- generating both machine-readable and human-readable output
+- **Reduce noise:** separate flaky tests from real failures
+- **Fix first:** prioritize issues that matter most
+- **Stable signal:** group failures by deterministic fingerprint
+- **CI-friendly:** designed for GitHub Actions and PR workflows
+- **No SaaS required:** everything runs inside your repo
 
-## 3. Minimal local CLI example
+## What you get
 
-Run FlakeShield against JUnit XML files:
+When FlakeShield runs, it writes:
 
-```bash
-flakeshield --reports "examples/demo-repo/outputs/junit_run*.xml" \
-           --out outputs/flake_report \
-           --db outputs/flakeshield.db
-```
+- `outputs/flake_report.json` — structured report for automation
+- `outputs/flake_report.md` — readable summary for reviewers
+- `outputs/flakeshield.db` — historic run state for flake detection
+- `outputs/pr_comment.md` — PR comment source for GitHub merges
 
-This writes:
+A good report is short and usable, not a giant trace dump.
 
-- `outputs/flake_report.json` — structured findings for scripts
-- `outputs/flake_report.md` — quick human report
-- `outputs/flakeshield.db` — historical test data
+## Recommended pattern
 
-## 4. What output looks like
+1. restore `outputs/flakeshield.db` from cache
+2. run tests to produce JUnit XML
+3. run FlakeShield against those XML files
+4. upload or comment summary output
 
-A typical human-readable report includes:
-
-```markdown
-### Flaky tests
-- **tests/test_demo.py::test_flaky** (runs=2, rate=0.50)
-
-### High risk failures
-- **fingerprint:a1b2c3** (CRITICAL)
-
-### Regressions
-- fingerprint:d4e5f6 (since run_123)
-
-### Novel failures
-- fingerprint:abc123
-```
-
-The report is intentionally short and review-friendly.
-
-## 5. Optional semantic mode
-
-Semantic mode is an advisory layer that runs only when you opt in.
-
-```bash
-flakeshield --reports "examples/demo-repo/outputs/junit_run*.xml" \
-           --out outputs/flake_report \
-           --db outputs/flakeshield.db \
-           --enable-semantic
-```
-
-Semantic mode adds:
-
-- known vs novel failure detection
-- top-k similarity suggestions
-- advisory risk scores
-- non-blocking ML assistance
-
-It is **optional** and **safely degrades** if models or network are unavailable.
-
-## 6. Why DB persistence matters
-
-FlakeShield stores results in `outputs/flakeshield.db` so each workflow run learns from prior history.
-
-That means:
-
-- flaky tests are detected only after repeated runs
-- risk scoring improves as the database grows
-- failures are grouped across time, not just per run
-
-### GitHub Actions cache pattern
-
-Use a cache restore/save step around FlakeShield. Keep the cache scoped to the branch so history is preserved across runs:
+### Cache example
 
 ```yaml
 - name: Restore FlakeShield DB cache
@@ -109,7 +112,7 @@ Use a cache restore/save step around FlakeShield. Keep the cache scoped to the b
     restore-keys: |
       flakeshield-db-${{ github.ref }}-
 
-# Run FlakeShield here
+# run FlakeShield here
 
 - name: Save FlakeShield DB cache
   if: always()
@@ -119,96 +122,44 @@ Use a cache restore/save step around FlakeShield. Keep the cache scoped to the b
     key: flakeshield-db-${{ github.ref }}
 ```
 
-## 7. Canonical GitHub workflow
+## Recommended GitHub workflow
 
-See the recommended example at `examples/canonical-workflow.yml`.
+For a complete example, see `examples/canonical-workflow.yml`.
 
-It shows the clean flow:
+That workflow shows the best practice for:
 
-1. restore DB cache
-2. run tests twice with unique JUnit filenames
-3. run FlakeShield
-4. generate a PR summary markdown
-5. post or update a PR comment
-6. upload artifacts
+- caching branch-specific state
+- generating JUnit XML files
+- running FlakeShield in CI
+- producing PR-friendly markdown
+- keeping the same comment updated over time
 
-## 8. Optional PR comments
+## PR comment output
 
-FlakeShield can generate PR-ready markdown. The workflow example includes an idempotent commenter that updates the same comment on each run using a hidden marker.
+FlakeShield is designed to support a compact GitHub PR summary that surfaces:
 
-### PR comment step
+- flaky tests
+- high-priority failures
+- regressions
+- novel issues
 
-```yaml
-- name: Post or update PR comment
-  if: github.event_name == 'pull_request'
-  uses: actions/github-script@v7
-  with:
-    script: |
-      const fs = require('fs');
-      const body = fs.readFileSync('outputs/pr_comment.md', 'utf8');
-      const comments = await github.rest.issues.listComments({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        issue_number: context.issue.number,
-      });
-      const existing = comments.data.find(c =>
-        c.body.includes('<!-- FlakeShield')
-      );
-      if (existing) {
-        await github.rest.issues.updateComment({
-          owner: context.repo.owner,
-          repo: context.repo.repo,
-          comment_id: existing.id,
-          body,
-        });
-      } else {
-        await github.rest.issues.createComment({
-          owner: context.repo.owner,
-          repo: context.repo.repo,
-          issue_number: context.issue.number,
-          body,
-        });
-      }
+A typical PR summary looks like:
+
+```markdown
+### Flaky tests
+- **tests/test_example.py::test_flaky** (runs=4, rate=0.50)
+
+### Fix First
+- **fp12345** — HIGH (0.82)
+- **fp67890** — regression since run_456
 ```
 
-## 9. Example repo ready to run
+## Notes for maintainers
 
-Use `examples/demo-repo/` for a tiny runnable suite with a flaky test, a deterministic failure, and sample generated outputs.
-
-```bash
-cd examples/demo-repo
-python -m pip install -r requirements.txt
-mkdir -p outputs
-pytest --junitxml=outputs/junit_run1_1.xml || true
-DEMO_FLAKY=1 pytest --junitxml=outputs/junit_run2_1.xml || true
-```
-
-Then run FlakeShield:
-
-```bash
-cd ../..
-flakeshield --reports "examples/demo-repo/outputs/junit_run*.xml" \
-           --out examples/demo-repo/outputs/flake_report \
-           --db examples/demo-repo/outputs/flakeshield.db \
-           --enable-semantic
-```
-
-## 10. Useful commands
-
-```bash
-flakeshield --help
-cat outputs/flake_report.json | python -m json.tool
-pytest -q
-```
-
-## 11. Notes
-
-- FlakeShield is intentionally focused on developer UX, not dashboards.
-- The deterministic engine is the source of truth.
-- Semantic mode is advisory and safe for CI.
-- The `examples/canonical-workflow.yml` file is the recommended integration pattern.
-
----
+- `outputs/flakeshield.db` stores historical failure state.
+- the CLI is deterministic first; semantic mode is advisory.
+- the action supports the same report format as the CLI.
+- keep `reports` pointed at JUnit XML output from your test steps.
 
 ## License
 
