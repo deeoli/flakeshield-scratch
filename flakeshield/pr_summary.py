@@ -1,42 +1,73 @@
-"""Generate a compact markdown summary suitable for PR comments.
-
-The summary is intentionally brief (a few sections with up to five items each)
-and safe to run even if the semantic portion of a report is absent.  It
-focuses on the output of the deterministic engine plus a handful of
-advisory items if available.
-"""
+"""Generate a compact markdown summary suitable for PR comments."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from flakeshield.report_ux import (
+    build_fix_first_list,
+    compute_overview_metrics,
+    suggested_next_steps,
+)
+
 
 def render_pr_summary(report: Dict[str, Any]) -> str:
-    """Return markdown text summarizing a FlakeShield report.
-
-    Sections included (each up to five entries):
-
-    * Flaky tests
-    * Fix First failures (semantic risk or deterministic regressions)
-    * Regressions (if ``regressions`` list present)
-    * Novel failures (if ``novel_failures`` list present)
-
-    All accesses are defensive; missing keys simply result in the section
-    being skipped.  The string returned ends with a newline.
-    """
-
+    """Return markdown text summarizing a FlakeShield report."""
     lines: List[str] = []
 
-    # --- flaky tests ---------------------------------------------------------
     flaky = report.get("flaky_tests") or {}
+    failure_groups = report.get("failure_groups") or {}
+    risk = report.get("risk_assessment") or {}
+    run_count = int(report.get("run_count") or 0)
+
+    # Minimal runs payload for overview when full runs aren't in JSON
+    runs_payload = [{"cases": []}]
+    overview = report.get("overview")
+    if not overview:
+        overview = {
+            "total_tests": report.get("metrics", {}).get("total_tests"),
+            "failures": report.get("metrics", {}).get("failures"),
+            "flaky_tests": len(flaky),
+            "failure_groups": len(failure_groups),
+        }
+        if overview["total_tests"] is None:
+            overview = compute_overview_metrics(runs_payload, failure_groups, flaky)
+
+    fix_first = build_fix_first_list(
+        failure_groups,
+        risk,
+        flaky,
+        total_runs=run_count or 1,
+        limit=5,
+    )
+
+    if fix_first:
+        lines.append("### Top Issues To Fix")
+        lines.append("")
+        for idx, item in enumerate(fix_first[:3], start=1):
+            lines.append(f"{idx}. **{item['title']}**")
+            lines.append("")
+            lines.append(f"**Status:** {item['status']}")
+            if item.get("risk_score") is not None:
+                lines.append(
+                    f"**Risk:** {item['risk_tier']} ({item['risk_score']:.2f})"
+                )
+            else:
+                lines.append(f"**Risk:** {item['risk_tier']}")
+            lines.append(f"**Why:** {item['why']}")
+            if item.get("seen_runs") and item.get("total_runs"):
+                lines.append(
+                    f"**Seen in:** {item['seen_runs']}/{item['total_runs']} runs"
+                )
+            lines.append("")
+
     if flaky:
         lines.append("### Flaky tests")
-        # sort by flake_rate desc then name for stability
         items = sorted(
             flaky.items(),
             key=lambda kv: (-float(kv[1].get("flake_rate", 0)), kv[0]),
         )
-        for test, data in items[:5]:
+        for test, data in items[:3]:
             rate = data.get("flake_rate")
             runs = data.get("runs_seen")
             if rate is not None and runs is not None:
@@ -45,44 +76,31 @@ def render_pr_summary(report: Dict[str, Any]) -> str:
                 lines.append(f"- **{test}**")
         lines.append("")
 
-    # --- fix-first failures -------------------------------------------------
-    risk = report.get("risk_assessment") or {}
-    regs = report.get("regressions") or []
-    if risk or regs:
-        lines.append("### Fix First")
-        if risk:
-            items = []
-            for fp, info in risk.items():
-                if isinstance(info, dict):
-                    tier = info.get("risk_tier", "UNKNOWN")
-                    score = info.get("risk_score")
-                else:
-                    tier = str(info)
-                    score = None
-                items.append((fp, tier, score))
-
-            items.sort(
-                key=lambda item: ((-item[2]) if item[2] is not None else 0.0, item[0])
-            )
-            for fp, tier, score in items[:5]:
-                if score is not None:
-                    lines.append(f"- **{fp}** — {tier} ({score:.2f})")
-                else:
-                    lines.append(f"- **{fp}** — {tier}")
-        else:
-            for r in regs[:5]:
-                fp = r.get("fingerprint")
-                since = r.get("since_run")
-                if fp and since:
-                    lines.append(f"- {fp} (regression since {since})")
-                elif fp:
-                    lines.append(f"- {fp}")
+    if overview and any(
+        overview.get(k, 0) for k in ("failures", "flaky_tests", "failure_groups")
+    ):
+        lines.append("### Overview")
+        if overview.get("total_tests") is not None:
+            lines.append(f"- Total Tests: **{overview['total_tests']}**")
+        if overview.get("failures") is not None:
+            lines.append(f"- Failures: **{overview['failures']}**")
+        lines.append(f"- Flaky Tests: **{overview.get('flaky_tests', len(flaky))}**")
+        lines.append(
+            f"- Failure Groups: **{overview.get('failure_groups', len(failure_groups))}**"
+        )
         lines.append("")
 
-    # --- regressions ---------------------------------------------------------
-    if regs:
+    steps = suggested_next_steps(fix_first)
+    if steps:
+        lines.append("### Suggested Next Steps")
+        for step in steps:
+            lines.append(f"- {step}")
+        lines.append("")
+
+    regs = report.get("regressions") or []
+    if regs and not fix_first:
         lines.append("### Regressions")
-        for r in regs[:5]:
+        for r in regs[:3]:
             fp = r.get("fingerprint")
             since = r.get("since_run")
             if fp and since:
@@ -91,17 +109,14 @@ def render_pr_summary(report: Dict[str, Any]) -> str:
                 lines.append(f"- {fp}")
         lines.append("")
 
-    # --- novel failures ------------------------------------------------------
     novel = report.get("novel_failures") or []
-    if novel:
+    if novel and not fix_first:
         lines.append("### Novel failures")
-        for fp in novel[:5]:
+        for fp in novel[:3]:
             lines.append(f"- {fp}")
         lines.append("")
 
     if not lines:
         return "No issues detected.\n\n<!-- FlakeShield -->\n"
 
-    # join and ensure trailing newline
-    text = "\n".join(lines).rstrip() + "\n\n<!-- FlakeShield -->\n"
-    return text
+    return "\n".join(lines).rstrip() + "\n\n<!-- FlakeShield -->\n"

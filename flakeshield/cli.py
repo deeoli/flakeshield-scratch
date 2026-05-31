@@ -20,6 +20,11 @@ from flakeshield.fingerprint import fingerprint_failure
 from flakeshield.known_novel import classify_known_novel
 from flakeshield.parse_junit import parse_pytest_junit
 from flakeshield.pr_summary import render_pr_summary
+from flakeshield.report_ux import (
+    build_fix_first_list,
+    compute_overview_metrics,
+    suggested_next_steps,
+)
 from flakeshield.risk_scoring import compute_risk_analysis
 from flakeshield.policy import classify_risk_tier
 from flakeshield.scoring import top_flakiest
@@ -338,6 +343,8 @@ def build_reports(
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
+    overview = compute_overview_metrics(runs, failure_groups, flaky)
+
     # JSON report
     report = {
         "runs_considered": run_ids,
@@ -350,11 +357,16 @@ def build_reports(
         "novel_failure_matches": novel_failure_matches if enable_semantic else {},
         "risk_analysis": risk_analysis if enable_semantic else {},
         "risk_assessment": risk_assessment if enable_semantic else {},
+        "overview": overview,
         "metrics": {
             "semantic_enabled": enable_semantic,
             "fingerprint_group_count": fingerprint_group_count,
             "semantic_group_count": semantic_group_count,
             "fragmentation_delta": fragmentation_delta,
+            "total_tests": overview["total_tests"],
+            "failures": overview["failures"],
+            "flaky_tests": overview["flaky_tests"],
+            "failure_groups": overview["failure_groups"],
         },
     }
 
@@ -422,19 +434,13 @@ def build_reports(
     has_high_risk = high_risk_count > 0
     healthy_run = not has_failure_groups and not has_flaky_tests and not has_high_risk
 
-    # Prioritized "Fix First" list from advisory risk output when available.
-    fix_first: list[tuple[str, dict, dict]] = []
-    if risk_assessment:
-        risk_sorted = sorted(
-            risk_assessment.items(),
-            key=lambda kv: (
-                -float(kv[1].get("risk_score", 0.0)),
-                kv[0],
-            ),
-        )
-        for fp, info in risk_sorted[:5]:
-            group = failure_groups.get(fp, {})
-            fix_first.append((fp, info, group))
+    fix_first = build_fix_first_list(
+        failure_groups,
+        risk_assessment,
+        flaky,
+        total_runs=len(run_ids),
+        limit=5,
+    )
 
     if healthy_run:
         lines.append("## ✅ CI Looks Healthy")
@@ -446,12 +452,13 @@ def build_reports(
         lines.append("No immediate CI triage appears necessary.")
         lines.append("")
 
-    lines.append("## 📊 Summary")
-    lines.append(f"- {len(failure_groups)} failure groups")
-    flaky_count = len(flaky)
-    flaky_label = "flaky test" if flaky_count == 1 else "flaky tests"
-    lines.append(f"- {flaky_count} {flaky_label}")
-    lines.append(f"- {high_risk_count} high-risk failures")
+    lines.append("## 📊 Overview")
+    lines.append(f"- Total Tests: **{overview['total_tests']}**")
+    lines.append(f"- Failures: **{overview['failures']}**")
+    lines.append(f"- Flaky Tests: **{overview['flaky_tests']}**")
+    lines.append(f"- Failure Groups: **{overview['failure_groups']}**")
+    if not healthy_run and high_risk_count:
+        lines.append(f"- High-Risk Failures: **{high_risk_count}**")
     lines.append("")
 
     if healthy_run:
@@ -468,45 +475,33 @@ def build_reports(
         if not fix_first:
             lines.append("✅ No prioritized failure groups yet.")
         else:
-            for fp, info, group in fix_first:
-                examples = group.get("examples", []) if isinstance(group, dict) else []
-                test_id = examples[0].get("test_id") if examples else "unknown_test"
-                seen_runs = len(
-                    {ex.get("run_id") for ex in examples if ex.get("run_id")}
-                )
-                total_runs = int(info.get("reasons", {}).get("runs_seen", len(run_ids)))
-                reasons = info.get("reasons", {}) if isinstance(info, dict) else {}
-                is_novel = bool(reasons.get("novel", False))
-                max_similarity = reasons.get("max_similarity")
-                flake_rate = float(reasons.get("flake_rate", 0.0))
-
-                if is_novel:
-                    why_this_matters = (
-                        "new failure pattern that may indicate a regression."
-                    )
-                elif max_similarity is not None and float(max_similarity) >= 0.8:
-                    why_this_matters = "recurring pattern similar to past failures, increasing CI noise."
-                elif flake_rate >= 0.5:
-                    why_this_matters = (
-                        "fails repeatedly across runs, reducing build reliability."
+            for idx, item in enumerate(fix_first, start=1):
+                lines.append(f"{idx}. **{item['title']}**")
+                lines.append("")
+                lines.append(f"   **Status:** {item['status']}")
+                if item.get("risk_score") is not None:
+                    lines.append(
+                        f"   **Risk:** {item['risk_tier']} ({item['risk_score']:.2f})"
                     )
                 else:
-                    why_this_matters = "repeated failure signal worth triaging before lower-risk noise."
-
-                lines.append(f"- **{test_id}**")
+                    lines.append(f"   **Risk:** {item['risk_tier']}")
                 lines.append(
-                    f"  - Risk: **{info.get('risk_tier', 'UNKNOWN')}** "
-                    f"({float(info.get('risk_score', 0.0)):.2f})"
+                    f"   **Seen in:** {item['seen_runs']}/{item['total_runs']} runs"
                 )
-                lines.append(f"  - Seen in {seen_runs}/{total_runs} runs")
-                lines.append(f"  - Why this matters: {why_this_matters}")
-                if examples:
-                    preview = _compact_preview(examples[0].get("message"))
+                lines.append(f"   **Why this matters:** {item['why']}")
+                if item.get("preview"):
+                    preview = _compact_preview(item["preview"])
                     if preview:
-                        lines.append(f"  - Preview: {preview}")
-                fp_preview = _compact_preview(fp, max_chars=140)
-                lines.append(f"  - Fingerprint: `{fp_preview}`")
+                        lines.append(f"   **Preview:** {preview}")
                 lines.append("")
+
+        next_steps = suggested_next_steps(fix_first)
+        if next_steps:
+            lines.append("## 🧭 Suggested Next Steps")
+            lines.append("")
+            for step in next_steps:
+                lines.append(f"- {step}")
+            lines.append("")
 
         if has_flaky_tests:
             lines.append("## ⚠️ Flaky Tests")

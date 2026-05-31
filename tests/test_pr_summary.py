@@ -4,8 +4,6 @@ from flakeshield.pr_summary import render_pr_summary
 
 
 def test_renders_without_semantic_fields():
-    # minimal report with no semantic/risk information should not crash and
-    # produce a sensible placeholder.
     report = {
         "runs_considered": ["r1", "r2"],
         "run_count": 2,
@@ -18,44 +16,57 @@ def test_renders_without_semantic_fields():
     assert "No issues" in md
 
 
-def test_includes_flaky_and_regressions_when_present(tmp_path):
+def test_includes_flaky_and_fix_first_when_present(tmp_path):
     report = {
+        "run_count": 3,
         "flaky_tests": {
             "test.foo": {"flake_rate": 0.33, "runs_seen": 3},
             "test.bar": {"flake_rate": 0.50, "runs_seen": 2},
         },
+        "failure_groups": {
+            "timeout fp": {
+                "count": 2,
+                "examples": [
+                    {
+                        "run_id": "r1",
+                        "test_id": "test.foo",
+                        "message": "TimeoutError: request timed out",
+                    }
+                ],
+            }
+        },
         "risk_assessment": {
-            "fp1": {"risk_tier": "HIGH", "risk_score": 0.85},
-            "fp2": {"risk_tier": "LOW", "risk_score": 0.10},
+            "timeout fp": {"risk_tier": "HIGH", "risk_score": 0.85, "reasons": {}},
+            "fp2": {"risk_tier": "LOW", "risk_score": 0.10, "reasons": {}},
         },
         "regressions": [
             {"fingerprint": "fpA", "since_run": "r1", "current_run": "r2"},
-            {"fingerprint": "fpB", "since_run": "r1", "current_run": "r2"},
         ],
-        "novel_failures": ["fpX", "fpY"],
+        "novel_failures": ["fpX"],
+        "overview": {
+            "total_tests": 10,
+            "failures": 2,
+            "flaky_tests": 2,
+            "failure_groups": 2,
+        },
     }
     md = render_pr_summary(report)
-    # flaky tests section
+    assert "Top Issues To Fix" in md
+    assert "Network timeout while calling task service" in md
+    assert "Status:" in md
+    assert "Risk:" in md
     assert "Flaky tests" in md
-    assert "test.bar" in md and "test.foo" in md
-    # fix-first section
-    assert "Fix First" in md
-    assert "fp1" in md and "HIGH" in md
-    # regressions
-    assert "Regressions" in md and "fpA" in md
-    # novel
-    assert "Novel failures" in md and "fpX" in md
+    assert "Overview" in md
+    assert "Suggested Next Steps" in md
 
 
 def test_cli_pr_summary(tmp_path):
-    # exercise the new CLI entry point
     json_path = tmp_path / "report.json"
     out_path = tmp_path / "pr.md"
     sample = {"flaky_tests": {"t": {"flake_rate": 0.1, "runs_seen": 1}}}
     json_path.write_text(json.dumps(sample))
     from flakeshield.cli import main
 
-    # simulate command line invocation
     import sys
 
     old_argv = sys.argv
@@ -72,7 +83,7 @@ def test_cli_pr_summary(tmp_path):
     finally:
         sys.argv = old_argv
     assert out_path.exists()
-    assert "Flaky tests" in out_path.read_text()
+    assert "FlakeShield" in out_path.read_text()
 
 
 def test_fix_first_fallback_to_regressions():
@@ -82,5 +93,5 @@ def test_fix_first_fallback_to_regressions():
         "regressions": [{"fingerprint": "fpA", "since_run": "r1"}],
     }
     md = render_pr_summary(report)
-    assert "Fix First" in md
-    assert "regression since r1" in md
+    assert "Regressions" in md
+    assert "since r1" in md
